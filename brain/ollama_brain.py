@@ -507,6 +507,159 @@ def fast_command(user_message):
             }
         }
 
+    # --------------------------------------------------------
+# OPEN WEBSITE
+# --------------------------------------------------------
+
+    open_website_match = re.match(
+        r"^(open|launch|start|go to)\s+(google|youtube|github|chatgpt|gmail|facebook|linkedin|whatsapp|stackoverflow|reddit)$",
+        lower
+    )
+
+    if open_website_match:
+        website = open_website_match.group(2)
+
+        return {
+            "type": "tool",
+            "tool": "open_website",
+            "args": {
+                "name": website
+            }
+        }
+
+
+   # --------------------------------------------------------
+# YOUTUBE SEARCH
+# --------------------------------------------------------
+
+    youtube_match = re.match(
+        r"^(search youtube for|youtube search for|search youtube)\s+(.+)$",
+        text,
+        re.IGNORECASE
+    )
+
+    if youtube_match:
+        query = youtube_match.group(2).strip()
+
+        if query:
+            return {
+                "type": "tool",
+                "tool": "youtube_search",
+                "args": {
+                    "query": query
+                }
+            }
+
+
+# --------------------------------------------------------
+# GOOGLE SEARCH
+# --------------------------------------------------------
+
+    google_match = re.match(
+        r"^(search google for|google search for|search for|google)\s+(.+)$",
+        text,
+        re.IGNORECASE
+    )
+
+    if google_match:
+        query = google_match.group(2).strip()
+
+        if query:
+            return {
+                "type": "tool",
+                "tool": "google_search",
+                "args": {
+                    "query": query
+                }
+            }
+# --------------------------------------------------------
+# BROWSER BACK
+# --------------------------------------------------------
+
+    if re.search(
+        r"^(go back|back|browser back)$",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "browser_back",
+            "args": {}
+        }
+
+# --------------------------------------------------------
+# BROWSER FORWARD
+# --------------------------------------------------------
+
+    if re.search(
+        r"^(go forward|forward|browser forward)$",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "browser_forward",
+            "args": {}
+        }
+
+# --------------------------------------------------------
+# BROWSER REFRESH
+# --------------------------------------------------------
+
+    if re.search(
+        r"^(refresh|refresh page|reload|reload page)$",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "browser_refresh",
+            "args": {}
+        }
+
+    # --------------------------------------------------------
+# BROWSER PAGE TITLE
+# --------------------------------------------------------
+
+    if re.search(
+        r"^(what page is open|which page is open|what page is this|what website is open|which website is open|what site is open|which site is open)$",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "get_page_title",
+            "args": {}
+        }
+
+
+# --------------------------------------------------------
+# CURRENT URL
+# --------------------------------------------------------
+
+    if re.search(
+        r"^(what is the current url|what's the current url|show current url|what url is open|which url is open)$",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "get_current_url",
+            "args": {}
+        }
+
+
+# --------------------------------------------------------
+# CLOSE BROWSER
+# --------------------------------------------------------
+
+    if re.search(
+        r"^(close browser|exit browser|quit browser)$",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "close_browser",
+            "args": {}
+        }
+
+    return None
+
 
 # ============================================================
 # OLLAMA FALLBACK

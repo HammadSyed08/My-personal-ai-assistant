@@ -1,4 +1,5 @@
 import time
+import re
 from brain.ollama_brain import ask_ai
 from security.permissions import (
     ask_confirmation,
@@ -6,7 +7,18 @@ from security.permissions import (
     requires_confirmation,
 )
 from tools.apps import close_application, open_application
-from tools.browser import google_search, open_url, open_website, youtube_search
+from tools.browser import (
+    google_search,
+    open_url,
+    open_website,
+    youtube_search,
+    get_page_title,
+    get_current_url,
+    browser_back,
+    browser_forward,
+    browser_refresh,
+    close_browser,
+)
 from tools.files import (
     copy_item,
     create_file,
@@ -291,6 +303,47 @@ def execute_tool(tool_name, args):
             return "Website name was not provided."
 
         return open_website(name)
+    
+    elif tool_name == "close_browser":
+        return close_browser()
+
+    elif tool_name == "get_page_title":
+        return get_page_title()
+
+    elif tool_name == "get_current_url":
+        return get_current_url()
+
+    elif tool_name == "browser_back":
+        return browser_back()
+
+    elif tool_name == "browser_forward":
+        return browser_forward()
+
+    elif tool_name == "browser_refresh":
+        return browser_refresh()
+
+    
+# ========================================================
+# BROWSER STATE
+# ========================================================
+
+    elif tool_name == "get_page_title":
+        return get_page_title()
+
+    elif tool_name == "get_current_url":
+        return get_current_url()
+
+    elif tool_name == "browser_back":
+        return browser_back()
+
+    elif tool_name == "browser_forward":
+        return browser_forward()
+
+    elif tool_name == "browser_refresh":
+        return browser_refresh()
+
+    elif tool_name == "close_browser":
+        return close_browser()
     
 # ========================================================
 # KEYBOARD
