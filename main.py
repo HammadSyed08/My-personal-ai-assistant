@@ -14,6 +14,7 @@ from tools.browser import (
     youtube_search,
     get_page_title,
     get_current_url,
+    find_element,
     browser_back,
     browser_forward,
     browser_refresh,
@@ -321,7 +322,6 @@ def execute_tool(tool_name, args):
 
     elif tool_name == "browser_refresh":
         return browser_refresh()
-
     
 # ========================================================
 # BROWSER STATE
@@ -344,6 +344,13 @@ def execute_tool(tool_name, args):
 
     elif tool_name == "close_browser":
         return close_browser()
+    elif tool_name == "find_element":
+        target = args.get("target", "").strip()
+
+        if not target:
+            return "Element description was not provided."
+
+        return find_element(target)
     
 # ========================================================
 # KEYBOARD

@@ -658,6 +658,40 @@ def fast_command(user_message):
             "args": {}
         }
 
+# --------------------------------------------------------
+# FIND BROWSER ELEMENT
+# --------------------------------------------------------
+
+    find_match = re.match(
+        r"^(find|locate|look for)\s+(the\s+)?(.+?)[?.!]*$",
+        lower
+    )
+
+    if find_match:
+        target = find_match.group(3).strip()
+
+        # Avoid stealing normal computer commands
+        browser_keywords = [
+            "button",
+            "link",
+            "search box",
+            "search field",
+            "input",
+            "login",
+            "sign in",
+            "menu",
+            "element",
+        ]
+
+        if any(keyword in target for keyword in browser_keywords):
+            return {
+                "type": "tool",
+                "tool": "find_element",
+                "args": {
+                    "target": target
+                }
+            }
+
     return None
 
 

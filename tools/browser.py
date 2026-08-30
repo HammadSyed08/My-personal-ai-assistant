@@ -371,3 +371,126 @@ def close_browser():
         _playwright = None
 
         return f"Browser close error: {error}"
+
+    # ============================================================
+# FIND ELEMENT
+# ============================================================
+
+def find_element(target):
+    """
+    Find an element on the current webpage.
+
+    The target can be a visible text, button name,
+    placeholder, label, or common element description.
+    """
+
+    if not target:
+        return {
+            "success": False,
+            "error": "Element description was not provided."
+        }
+
+    try:
+        page = get_browser_page()
+
+        if page is None:
+            return {
+                "success": False,
+                "error": "Could not start the browser."
+            }
+
+        target = target.strip()
+
+        print(f"[Browser] Finding element: {target}")
+
+        # ----------------------------------------------------
+        # 1. Try visible text
+        # ----------------------------------------------------
+
+        locator = page.get_by_text(
+            target,
+            exact=True
+        )
+
+        if locator.count() > 0:
+            element = locator.first
+
+            return {
+                "success": True,
+                "found": True,
+                "target": target,
+                "element_type": "text",
+                "text": element.inner_text(),
+            }
+
+        # ----------------------------------------------------
+        # 2. Try button
+        # ----------------------------------------------------
+
+        locator = page.get_by_role(
+            "button",
+            name=target
+        )
+
+        if locator.count() > 0:
+            element = locator.first
+
+            return {
+                "success": True,
+                "found": True,
+                "target": target,
+                "element_type": "button",
+                "text": element.inner_text(),
+            }
+
+        # ----------------------------------------------------
+        # 3. Try link
+        # ----------------------------------------------------
+
+        locator = page.get_by_role(
+            "link",
+            name=target
+        )
+
+        if locator.count() > 0:
+            element = locator.first
+
+            return {
+                "success": True,
+                "found": True,
+                "target": target,
+                "element_type": "link",
+                "text": element.inner_text(),
+            }
+
+        # ----------------------------------------------------
+        # 4. Try placeholder
+        # ----------------------------------------------------
+
+        locator = page.get_by_placeholder(target)
+
+        if locator.count() > 0:
+            return {
+                "success": True,
+                "found": True,
+                "target": target,
+                "element_type": "input",
+                "placeholder": target,
+            }
+
+        # ----------------------------------------------------
+        # Element not found
+        # ----------------------------------------------------
+
+        return {
+            "success": True,
+            "found": False,
+            "target": target,
+            "message": "No matching element was found."
+        }
+
+    except Exception as error:
+        return {
+            "success": False,
+            "error": str(error)
+        }
