@@ -19,6 +19,15 @@ from tools.browser import (
     browser_forward,
     browser_refresh,
     close_browser,
+    browser_new_tab,
+    browser_close_tab,
+    browser_next_tab,
+    browser_previous_tab,
+    browser_list_tabs,
+)
+from tools.chrome_profiles import (
+    open_chrome_profile,
+    list_chrome_profiles,
 )
 from tools.files import (
     copy_item,
@@ -322,6 +331,21 @@ def execute_tool(tool_name, args):
 
     elif tool_name == "browser_refresh":
         return browser_refresh()
+
+    elif tool_name == "browser_new_tab":
+        return browser_new_tab()
+
+    elif tool_name == "browser_close_tab":
+        return browser_close_tab()
+
+    elif tool_name == "browser_next_tab":
+        return browser_next_tab()
+
+    elif tool_name == "browser_previous_tab":
+        return browser_previous_tab()
+
+    elif tool_name == "browser_list_tabs":
+        return browser_list_tabs()
     
 # ========================================================
 # BROWSER STATE
@@ -344,13 +368,45 @@ def execute_tool(tool_name, args):
 
     elif tool_name == "close_browser":
         return close_browser()
+
+# ========================================================
+# BROWSER DOM
+# ========================================================
+
     elif tool_name == "find_element":
-        target = args.get("target", "").strip()
+
+        target = args.get(
+            "target",
+            ""
+        ).strip()
 
         if not target:
-            return "Element description was not provided."
+            return "Element target was not provided."
 
         return find_element(target)
+    
+    elif tool_name == "open_chrome_profile":
+
+        profile_name = args.get(
+            "profile_name",
+            ""
+        ).strip()
+
+        if not profile_name:
+            return "Chrome profile name was not provided."
+
+        result = open_chrome_profile(profile_name)
+
+        if not result.get("success"):
+            return result.get(
+                "error",
+                "Could not open Chrome profile."
+            )
+
+        return result.get(
+            "message",
+            f"Opened Chrome profile '{profile_name}'."
+        )
     
 # ========================================================
 # KEYBOARD
@@ -390,8 +446,55 @@ def execute_tool(tool_name, args):
 # MOUSE
 # ========================================================
 
+    elif tool_name == "move_mouse":
+        x = args.get("x")
+        y = args.get("y")
+
+        if x is None or y is None:
+            return "Mouse coordinates were not provided."
+
+        return move_mouse(x, y)
+
+
+    elif tool_name == "click_mouse":
+        button = args.get("button", "left")
+        clicks = args.get("clicks", 1)
+
+        return click_mouse(
+            button=button,
+            clicks=clicks
+        )
+
+
+    elif tool_name == "double_click":
+        x = args.get("x")
+        y = args.get("y")
+
+        if x is not None and y is not None:
+            move_mouse(x, y)
+
+        return double_click()
+
+
+    elif tool_name == "right_click":
+        x = args.get("x")
+        y = args.get("y")
+
+        if x is not None and y is not None:
+            move_mouse(x, y)
+
+        return right_click()
+
+
+    elif tool_name == "scroll_mouse":
+        amount = args.get("amount", 0)
+
+        return scroll_mouse(amount)
+
+
     elif tool_name == "locate_and_click":
         target = args.get("target", "")
+
         if not target:
             return "Target element description was not provided."
 
@@ -401,15 +504,28 @@ def execute_tool(tool_name, args):
 
         # 2. Query vision module for coordinates
         from tools.vision import locate_element_coordinates
-        coord_result = locate_element_coordinates(target, screenshot_path)
+
+        coord_result = locate_element_coordinates(
+            target,
+            screenshot_path
+        )
 
         if not coord_result.get("success"):
-            return f"Vision tracking failed: {coord_result.get('error')}"
+            return (
+                f"Vision tracking failed: "
+                f"{coord_result.get('error')}"
+            )
 
-        # 3. Move and Click
-        x, y = coord_result["x"], coord_result["y"]
+        # 3. Move and click
+        x = coord_result["x"]
+        y = coord_result["y"]
+
         move_mouse(x, y)
-        return click_mouse(button="left", clicks=1)
+
+        return click_mouse(
+            button="left",
+            clicks=1
+        )
 
 
 # ========================================================

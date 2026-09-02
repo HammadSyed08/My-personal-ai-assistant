@@ -294,6 +294,72 @@ def fast_command(user_message):
                 "tool": "get_screen_size",
                 "args": {}
             }
+# --------------------------------------------------------
+# OPEN CHROME PROFILE
+# --------------------------------------------------------
+
+    chrome_profile_patterns = [
+        r"^open\s+(.+?)\s+profile$",
+        r"^open\s+(.+?)\s+profile\s+in\s+chrome$",
+        r"^open\s+(.+?)\s+chrome\s+profile$",
+        r"^open\s+chrome\s+profile\s+(.+)$",
+        r"^switch\s+to\s+(.+?)\s+profile$",
+        r"^switch\s+to\s+(.+?)\s+profile\s+in\s+chrome$",
+    ]
+
+    for pattern in chrome_profile_patterns:
+
+        profile_match = re.match(
+            pattern,
+            text.strip(),
+            re.IGNORECASE
+        )
+
+        if profile_match:
+
+            profile_name = profile_match.group(1).strip()
+
+            return {
+                "type": "tool",
+                "tool": "open_chrome_profile",
+                "args": {
+                    "profile_name": profile_name
+                }
+            }
+
+# ========================================================
+# OPEN WEBSITE
+# ========================================================
+
+    website_match = re.match(
+        r"^(open|launch|start|go to)\s+(?:the\s+)?(.+?)\s*(?:website|site)?$",
+        lower
+    )
+
+    if website_match:
+        target = website_match.group(2).strip()
+
+        websites = {
+            "google": "google",
+            "youtube": "youtube",
+            "github": "github",
+            "chatgpt": "chatgpt",
+            "gmail": "gmail",
+            "facebook": "facebook",
+            "linkedin": "linkedin",
+            "whatsapp": "whatsapp",
+            "stackoverflow": "stackoverflow",
+            "reddit": "reddit",
+        }
+
+        if target in websites:
+            return {
+                "type": "tool",
+                "tool": "open_website",
+                "args": {
+                    "name": websites[target]
+                }
+            }
 
         # --------------------------------------------------------
         # OPEN APPLICATION
@@ -507,39 +573,19 @@ def fast_command(user_message):
             }
         }
 
-    # --------------------------------------------------------
-# OPEN WEBSITE
-# --------------------------------------------------------
 
-    open_website_match = re.match(
-        r"^(open|launch|start|go to)\s+(google|youtube|github|chatgpt|gmail|facebook|linkedin|whatsapp|stackoverflow|reddit)$",
-        lower
-    )
-
-    if open_website_match:
-        website = open_website_match.group(2)
-
-        return {
-            "type": "tool",
-            "tool": "open_website",
-            "args": {
-                "name": website
-            }
-        }
-
-
-   # --------------------------------------------------------
+# ========================================================
 # YOUTUBE SEARCH
-# --------------------------------------------------------
+# ========================================================
 
     youtube_match = re.match(
-        r"^(search youtube for|youtube search for|search youtube)\s+(.+)$",
+        r"^(?:search|find)\s+(?:on\s+)?youtube\s+(?:for\s+)?(.+)$",
         text,
         re.IGNORECASE
     )
 
     if youtube_match:
-        query = youtube_match.group(2).strip()
+        query = youtube_match.group(1).strip()
 
         if query:
             return {
@@ -551,18 +597,18 @@ def fast_command(user_message):
             }
 
 
-# --------------------------------------------------------
+# ========================================================
 # GOOGLE SEARCH
-# --------------------------------------------------------
+# ========================================================
 
     google_match = re.match(
-        r"^(search google for|google search for|search for|google)\s+(.+)$",
+        r"^(?:search|find)\s+(?:on\s+)?google\s+(?:for\s+)?(.+)$",
         text,
         re.IGNORECASE
     )
 
     if google_match:
-        query = google_match.group(2).strip()
+        query = google_match.group(1).strip()
 
         if query:
             return {
@@ -572,6 +618,77 @@ def fast_command(user_message):
                     "query": query
                 }
             }
+
+# --------------------------------------------------------
+# BROWSER NEW TAB
+# --------------------------------------------------------
+
+        if re.search(
+            r"^\s*(open|create|new)\s+(a\s+)?new\s+tab\s*$",
+            lower
+        ):
+            return {
+                "type": "tool",
+                "tool": "browser_new_tab",
+                "args": {}
+            }
+
+# --------------------------------------------------------
+# BROWSER CLOSE TAB
+# --------------------------------------------------------
+
+        if re.search(
+            r"^\s*(close|exit)\s+(this\s+)?tab\s*$",
+            lower
+        ):
+            return {
+                "type": "tool",
+                "tool": "browser_close_tab",
+                "args": {}
+            }
+
+# --------------------------------------------------------
+# BROWSER NEXT TAB
+# --------------------------------------------------------
+
+        if re.search(
+            r"^\s*(next|switch to next)\s+tab\s*$",
+            lower
+        ):
+            return {
+                "type": "tool",
+                "tool": "browser_next_tab",
+                "args": {}
+            }
+
+# --------------------------------------------------------
+# BROWSER PREVIOUS TAB
+# --------------------------------------------------------
+
+        if re.search(
+            r"^\s*(previous|last|switch to previous)\s+tab\s*$",
+            lower
+        ):
+            return {
+                "type": "tool",
+                "tool": "browser_previous_tab",
+                "args": {}
+            }
+
+# --------------------------------------------------------
+# BROWSER LIST TABS
+# --------------------------------------------------------
+
+        if re.search(
+            r"^\s*(list|show)\s+(all\s+)?tabs\s*$",
+            lower
+        ):
+            return {
+                "type": "tool",
+                "tool": "browser_list_tabs",
+                "args": {}
+            }
+    
 # --------------------------------------------------------
 # BROWSER BACK
 # --------------------------------------------------------
@@ -614,7 +731,7 @@ def fast_command(user_message):
             "args": {}
         }
 
-    # --------------------------------------------------------
+# --------------------------------------------------------
 # BROWSER PAGE TITLE
 # --------------------------------------------------------
 
@@ -662,28 +779,24 @@ def fast_command(user_message):
 # FIND BROWSER ELEMENT
 # --------------------------------------------------------
 
-    find_match = re.match(
-        r"^(find|locate|look for)\s+(the\s+)?(.+?)[?.!]*$",
-        lower
-    )
+    find_element_patterns = [
+        r"^find\s+(?:the\s+)?(.+)$",
+        r"^locate\s+(?:the\s+)?(.+)$",
+        r"^find\s+(?:the\s+)?(.+?)\s+(?:element|field|box|button)$",
+    ]
 
-    if find_match:
-        target = find_match.group(3).strip()
+    for pattern in find_element_patterns:
 
-        # Avoid stealing normal computer commands
-        browser_keywords = [
-            "button",
-            "link",
-            "search box",
-            "search field",
-            "input",
-            "login",
-            "sign in",
-            "menu",
-            "element",
-        ]
+        match = re.match(
+            pattern,
+            text,
+            re.IGNORECASE
+        )
 
-        if any(keyword in target for keyword in browser_keywords):
+        if match:
+
+            target = match.group(1).strip()
+
             return {
                 "type": "tool",
                 "tool": "find_element",
