@@ -1,6 +1,7 @@
 import time
 import re
-from brain.ollama_brain import ask_ai
+from brain.ollama_brain import ask_ai , fast_command
+from brain.context import context
 from security.permissions import (
     ask_confirmation,
     authorize_path,
@@ -28,6 +29,7 @@ from tools.browser import (
 from tools.chrome_profiles import (
     open_chrome_profile,
     list_chrome_profiles,
+    get_current_chrome_profile
 )
 from tools.files import (
     copy_item,
@@ -294,11 +296,16 @@ def execute_tool(tool_name, args):
         return open_url(url)
 
     elif tool_name == "google_search":
-        query = args.get("query", "").strip()
-        if not query:
-            return "Google search query was not provided."
+        result = google_search(args["query"])
 
-        return google_search(query)
+        if isinstance(result, dict) and result.get("success"):
+            context.save_search(
+                engine="google",
+                query=args["query"],
+                results=result.get("results", [])
+            )
+
+        return result
 
     elif tool_name == "youtube_search":
         query = args.get("query", "").strip()
@@ -333,7 +340,8 @@ def execute_tool(tool_name, args):
         return browser_refresh()
 
     elif tool_name == "browser_new_tab":
-        return browser_new_tab()
+        url = args.get("url")
+        return browser_new_tab(url)
 
     elif tool_name == "browser_close_tab":
         return browser_close_tab()
@@ -407,6 +415,9 @@ def execute_tool(tool_name, args):
             "message",
             f"Opened Chrome profile '{profile_name}'."
         )
+
+    elif tool_name == "get_current_chrome_profile":
+        return get_current_chrome_profile()
     
 # ========================================================
 # KEYBOARD
@@ -624,6 +635,105 @@ def execute_tool(tool_name, args):
         return f"Unknown tool: {tool_name}"
 
 
+def handle_context_command(user_input):
+    """
+    Handle commands that refer to previous search results.
+    """
+
+    text = user_input.lower().strip()
+
+    # --------------------------------------------------------
+    # Detect result number
+    # --------------------------------------------------------
+
+    result_patterns = {
+        "first": 1,
+        "1st": 1,
+
+        "second": 2,
+        "2nd": 2,
+
+        "third": 3,
+        "3rd": 3,
+
+        "fourth": 4,
+        "4th": 4,
+
+        "fifth": 5,
+        "5th": 5,
+
+        "sixth": 6,
+        "6th": 6,
+
+        "seventh": 7,
+        "7th": 7,
+
+        "eighth": 8,
+        "8th": 8,
+
+        "ninth": 9,
+        "9th": 9,
+
+        "tenth": 10,
+        "10th": 10,
+    }
+
+    # --------------------------------------------------------
+    # Check whether user is referring to a search result
+    # --------------------------------------------------------
+
+    if not any(
+        phrase in text
+        for phrase in [
+            "result",
+            "search result",
+            "search results"
+        ]
+    ):
+        return None
+
+    # --------------------------------------------------------
+    # Find requested result number
+    # --------------------------------------------------------
+
+    result_number = None
+
+    for word, number in result_patterns.items():
+
+        if word in text:
+            result_number = number
+            break
+
+    if result_number is None:
+        return None
+
+    # --------------------------------------------------------
+    # Get saved search result
+    # --------------------------------------------------------
+
+    result = context.get_search_result(result_number)
+
+    if result is None:
+        return {
+            "type": "chat",
+            "response": (
+                "I don't have that search result available."
+            )
+        }
+
+    # --------------------------------------------------------
+    # Open result
+    # --------------------------------------------------------
+
+    return {
+        "type": "tool",
+        "tool": "open_url",
+        "args": {
+            "url": result["url"]
+        }
+    }
+
+
 # ============================================================
 # MAIN PROGRAM
 # ============================================================
@@ -652,14 +762,20 @@ def main():
 
         ai_start = time.perf_counter()
 
-        decision = ask_ai(user_input)
+# ====================================================
+# FAST LOCAL COMMAND
+# ====================================================
 
-        ai_end = time.perf_counter()
+                # Fast local command
+        decision = fast_command(user_input)
 
-        print(
-            f"[AI Response Time] "
-            f"{ai_end - ai_start:.2f} seconds"
-        )
+        # Context-aware command
+        if decision is None:
+            decision = handle_context_command(user_input)
+
+        # Ollama fallback
+        if decision is None:
+            decision = ask_ai(user_input)
 
         # ====================================================
         # NORMAL CHAT

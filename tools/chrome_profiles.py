@@ -11,6 +11,13 @@ CHROME_USER_DATA = os.path.expandvars(
     r"%LOCALAPPDATA%\Google\Chrome\User Data"
 )
 
+_current_profile = None
+
+# Remote debugging ports for Chrome profiles
+_profile_debug_ports = {}
+
+_next_debug_port = 9222
+
 
 # ============================================================
 # CHROME PATH
@@ -172,14 +179,34 @@ def find_chrome_profile(profile_name):
     }
 
 
+def get_profile_debug_port(directory):
+    global _profile_debug_ports
+    global _next_debug_port
+
+    if directory in _profile_debug_ports:
+        return _profile_debug_ports[directory]
+
+    port = _next_debug_port
+
+    _profile_debug_ports[directory] = port
+    _next_debug_port += 1
+
+    return port
+
+
 # ============================================================
 # OPEN CHROME PROFILE
 # ============================================================
 
-def open_chrome_profile(profile_name):
+def open_chrome_profile(profile_name, open_new_tab=False, website=None):
     """
-    Open Google Chrome using a specific Chrome profile name.
+    Open Google Chrome using a specific Chrome profile.
+
+    Chrome is launched with remote debugging enabled so that
+    Playwright can connect to the real Chrome instance.
     """
+
+    global _current_profile
 
     if not profile_name:
         return {
@@ -189,7 +216,10 @@ def open_chrome_profile(profile_name):
 
     profile_name = profile_name.strip().lower()
 
-    # Get all Chrome profiles
+    # --------------------------------------------------------
+    # GET ALL CHROME PROFILES
+    # --------------------------------------------------------
+
     result = list_chrome_profiles()
 
     if not result.get("success"):
@@ -197,10 +227,14 @@ def open_chrome_profile(profile_name):
 
     profiles = result.get("profiles", [])
 
-    # Find requested profile
+    # --------------------------------------------------------
+    # FIND REQUESTED PROFILE
+    # --------------------------------------------------------
+
     selected_profile = None
 
     for profile in profiles:
+
         name = profile.get("name", "").strip().lower()
 
         if name == profile_name:
@@ -208,6 +242,7 @@ def open_chrome_profile(profile_name):
             break
 
     if selected_profile is None:
+
         available = [
             profile.get("name", "")
             for profile in profiles
@@ -215,11 +250,13 @@ def open_chrome_profile(profile_name):
 
         return {
             "success": False,
-            "error": (
-                f"Chrome profile '{profile_name}' was not found.",
-            ),
+            "error": f"Chrome profile '{profile_name}' was not found.",
             "available_profiles": available
         }
+
+    # --------------------------------------------------------
+    # GET CHROME PATH
+    # --------------------------------------------------------
 
     chrome_path = get_chrome_path()
 
@@ -228,6 +265,10 @@ def open_chrome_profile(profile_name):
             "success": False,
             "error": "Google Chrome executable was not found."
         }
+
+    # --------------------------------------------------------
+    # GET PROFILE DIRECTORY
+    # --------------------------------------------------------
 
     directory = selected_profile.get("directory")
 
@@ -240,18 +281,67 @@ def open_chrome_profile(profile_name):
             )
         }
 
+    # --------------------------------------------------------
+    # GET DEBUGGING PORT
+    # --------------------------------------------------------
+
+    debug_port = get_profile_debug_port(directory)
+
+    # Save selected profile
+    _current_profile = selected_profile
+
+    # --------------------------------------------------------
+    # BUILD CHROME COMMAND
+    # --------------------------------------------------------
+
+    chrome_command = [
+        chrome_path,
+
+        f"--profile-directory={directory}",
+
+        f"--remote-debugging-port={debug_port}",
+
+        "--remote-allow-origins=http://localhost",
+
+    ]
+
+    # --------------------------------------------------------
+    # WEBSITE
+    # --------------------------------------------------------
+
+    if website:
+
+        website = website.strip()
+
+        if not website.startswith(("http://", "https://")):
+            website = "https://" + website
+
+        chrome_command.append(website)
+
+    # --------------------------------------------------------
+    # OPEN CHROME
+    # --------------------------------------------------------
+
     try:
 
-        subprocess.Popen([
-            chrome_path,
-            f"--profile-directory={directory}"
-        ])
+        print(
+            f"[Chrome] Opening profile: "
+            f"{selected_profile.get('name')}"
+        )
+
+        print(
+            f"[Chrome] Debugging port: {debug_port}"
+        )
+
+        subprocess.Popen(chrome_command)
 
         return {
             "success": True,
             "profile": selected_profile.get("name"),
             "directory": directory,
-            "email": selected_profile.get("email", ""),
+            "debug_port": debug_port,
+            "website": website,
+            "open_new_tab": open_new_tab,
             "message": (
                 f"Opened Chrome profile "
                 f"'{selected_profile.get('name')}'."
@@ -280,4 +370,25 @@ def list_chrome_profiles():
     return {
         "success": True,
         "profiles": profiles
+    }
+
+
+# ============================================================
+# GET CURRENT CHROME PROFILE
+# ============================================================
+
+def get_current_chrome_profile():
+    global _current_profile
+
+    if _current_profile is None:
+        return {
+            "success": False,
+            "error": "No Chrome profile is currently selected."
+        }
+
+    return {
+        "success": True,
+        "profile": _current_profile.get("name"),
+        "directory": _current_profile.get("directory"),
+        "email": _current_profile.get("email", "")
     }

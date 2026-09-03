@@ -8,57 +8,155 @@ from urllib.parse import quote_plus
 
 _playwright = None
 _browser = None
+_context = None
 _page = None
 
 _pages = []
 _active_page_index = 0
 
 # ============================================================
+# NAVIGATION HELPER
+# ============================================================
+
+def navigate_page(page, url, timeout=15000):
+    """
+    Navigate to a URL without waiting for the entire page
+    to finish loading.
+
+    Modern websites can keep loading resources indefinitely,
+    so we only wait until navigation is committed.
+    """
+    try:
+        page.goto(
+            url,
+            wait_until="commit",
+            timeout=timeout
+        )
+
+        return {
+            "success": True,
+            "url": page.url
+        }
+
+    except Exception as error:
+        return {
+            "success": False,
+            "error": str(error)
+        }
+
+# ============================================================
 # START BROWSER
 # ============================================================
+
 
 def start_browser():
     global _playwright
     global _browser
+    global _context
     global _page
+    global _pages
+    global _active_page_index
 
-    # Already running
-    if _browser is not None and _page is not None:
+    # Browser is already connected
+    if (
+        _browser is not None
+        and _context is not None
+        and _page is not None
+    ):
         try:
-            if _browser.is_connected() and not _page.is_closed():
+            if (
+                _browser.is_connected()
+                and not _page.is_closed()
+            ):
                 return _page
         except Exception:
             pass
 
-    # Clean up stale objects
+    # Reset old browser state
     _playwright = None
     _browser = None
+    _context = None
     _page = None
+    _pages = []
+    _active_page_index = 0
 
     try:
         print("[Browser] Starting Playwright...")
 
         _playwright = sync_playwright().start()
 
-        print("[Browser] Launching Chromium...")
+        print("[Browser] Connecting to Chrome on port 9222...")
 
-        _browser = _playwright.chromium.launch(
-            headless=False
+        _browser = _playwright.chromium.connect_over_cdp(
+            "http://127.0.0.1:9222"
         )
 
-        _page = _browser.new_page()
+        print("[Browser] Connected to Chrome.")
 
-        _pages.clear()
-        _pages.append(_page)
+        # --------------------------------------------------------
+        # Get existing Chrome contexts
+        # --------------------------------------------------------
 
+        contexts = _browser.contexts
+
+        if not contexts:
+            print("[Browser] No Chrome context found.")
+
+            _browser.close()
+            _playwright.stop()
+
+            _browser = None
+            _playwright = None
+
+            return None
+
+        # Use the existing Chrome context
+        _context = contexts[0]
+
+        # --------------------------------------------------------
+        # Get existing Chrome tabs
+        # --------------------------------------------------------
+
+        _pages = [
+            page
+            for page in _context.pages
+            if not page.is_closed()
+        ]
+
+        if not _pages:
+            print("[Browser] No Chrome tabs found.")
+
+            _browser.close()
+            _playwright.stop()
+
+            _browser = None
+            _context = None
+            _playwright = None
+
+            return None
+
+        # Use the first existing tab
         _active_page_index = 0
+        _page = _pages[_active_page_index]
+
+        try:
+            _page.bring_to_front()
+        except Exception:
+            pass
+
+        print(
+            f"[Browser] Connected to Chrome with "
+            f"{len(_pages)} existing tab(s)."
+        )
 
         print("[Browser] Browser ready.")
 
         return _page
 
     except Exception as error:
-        print(f"[Browser Error] Could not start browser: {error}")
+        print(
+            f"[Browser Error] Could not connect to Chrome: {error}"
+        )
 
         try:
             if _browser is not None:
@@ -74,9 +172,101 @@ def start_browser():
 
         _playwright = None
         _browser = None
+        _context = None
         _page = None
+        _pages = []
+        _active_page_index = 0
 
         return None
+
+# def start_browser():
+#     global _playwright
+#     global _browser
+#     global _context
+#     global _page
+#     global _pages
+#     global _active_page_index
+
+#     # Browser is already running
+#     if (
+#         _browser is not None
+#         and _context is not None
+#         and _page is not None
+#     ):
+#         try:
+#             if (
+#                 _browser.is_connected()
+#                 and not _page.is_closed()
+#             ):
+#                 return _page
+#         except Exception:
+#             pass
+
+#     # Reset old browser state
+#     _playwright = None
+#     _browser = None
+#     _context = None
+#     _page = None
+#     _pages = []
+#     _active_page_index = 0
+
+#     try:
+#         print("[Browser] Starting Playwright...")
+
+#         _playwright = sync_playwright().start()
+
+#         print("[Browser] Launching Chromium...")
+
+#         _browser = _playwright.chromium.launch(
+#             headless=False
+#         )
+
+#         # IMPORTANT:
+#         # Create ONE browser context.
+#         # All pages inside this context behave like tabs.
+#         _context = _browser.new_context()
+
+#         # Create the first tab
+#         _page = _context.new_page()
+
+#         _pages = [_page]
+#         _active_page_index = 0
+
+#         print("[Browser] Browser ready.")
+
+#         return _page
+
+#     except Exception as error:
+#         print(
+#             f"[Browser Error] Could not start browser: {error}"
+#         )
+
+#         try:
+#             if _context is not None:
+#                 _context.close()
+#         except Exception:
+#             pass
+
+#         try:
+#             if _browser is not None:
+#                 _browser.close()
+#         except Exception:
+#             pass
+
+#         try:
+#             if _playwright is not None:
+#                 _playwright.stop()
+#         except Exception:
+#             pass
+
+#         _playwright = None
+#         _browser = None
+#         _context = None
+#         _page = None
+#         _pages = []
+#         _active_page_index = 0
+
+#         return None
 
 
 # ============================================================
@@ -84,6 +274,8 @@ def start_browser():
 # ============================================================
 
 def get_browser_page():
+    global _browser
+    global _context
     global _page
     global _pages
     global _active_page_index
@@ -133,37 +325,83 @@ def get_browser_page():
     return _page
 
 
-def browser_new_tab():
+# ============================================================
+# NEW TAB
+# ============================================================
+
+def browser_new_tab(url=None):
+    global _browser
+    global _context
     global _page
     global _pages
     global _active_page_index
 
     try:
-        if _browser is None:
-            page = start_browser()
+        page = get_browser_page()
 
-            if page is None:
-                return "Could not start the browser."
+        if page is None:
+            return {
+                "success": False,
+                "error": "Could not start the browser."
+            }
 
-            return "New tab opened."
+        # Make sure the browser context exists
+        if _context is None:
+            return {
+                "success": False,
+                "error": "Browser context is not running."
+            }
 
-        page = _browser.new_page()
+        print("[Browser] Opening new tab...")
 
-        _pages.append(page)
+        # IMPORTANT:
+        # Create the new page inside the SAME context.
+        # This makes it a new tab instead of a separate window.
+        new_page = _context.new_page()
+
+        _pages.append(new_page)
 
         _active_page_index = len(_pages) - 1
 
-        _page = page
+        _page = new_page
 
-        print(
-            f"[Browser] New tab opened. "
-            f"Active tab: {_active_page_index + 1}"
-        )
+        if url:
+            url = url.strip()
 
-        return "New tab opened."
+            if not url.startswith(
+                ("http://", "https://")
+            ):
+                url = "https://" + url
+
+            print(
+                f"[Browser] Opening URL in new tab: {url}"
+            )
+
+            result = navigate_page(new_page, url)
+
+            if not result["success"]:
+                return {
+                    "success": False,
+                    "error": result["error"]
+                }
+
+        try:
+            new_page.bring_to_front()
+        except Exception:
+            pass
+
+        return {
+            "success": True,
+            "message": "New tab opened.",
+            "tab": _active_page_index + 1,
+            "url": new_page.url
+        }
 
     except Exception as error:
-        return f"Could not open new tab: {error}"
+        return {
+            "success": False,
+            "error": str(error)
+        }
 
 
 def browser_list_tabs():
@@ -314,7 +552,6 @@ def browser_close_tab():
 # ============================================================
 
 def open_url(url):
-
     if not url:
         return "No URL was provided."
 
@@ -331,25 +568,41 @@ def open_url(url):
 
         print(f"[Browser] Opening URL: {url}")
 
-        page.goto(
-            url,
-            wait_until="domcontentloaded"
-        )
+        try:
+            page.goto(
+                url,
+                wait_until="commit",
+                timeout=15000
+            )
+        except Exception as error:
+            # Chrome/CDP can occasionally report a connection
+            # close even though navigation has started.
+            print(
+                f"[Browser] Navigation warning: {error}"
+            )
 
-        return f"Opened: {url}"
+        return {
+            "success": True,
+            "message": f"Opened: {url}",
+            "url": page.url
+        }
 
     except Exception as error:
-        return f"Could not open URL: {error}"
-
+        return {
+            "success": False,
+            "error": f"Could not open URL: {error}"
+        }
 
 # ============================================================
 # GOOGLE SEARCH
 # ============================================================
 
 def google_search(query):
-
     if not query:
-        return "Search query was not provided."
+        return {
+            "success": False,
+            "error": "Search query was not provided."
+        }
 
     try:
         encoded_query = quote_plus(query)
@@ -362,21 +615,226 @@ def google_search(query):
         page = get_browser_page()
 
         if page is None:
-            return "Could not start the browser."
+            return {
+                "success": False,
+                "error": "Could not start the browser."
+            }
 
         print(
             f"[Browser] Searching Google for: {query}"
         )
 
-        page.goto(
-            url,
-            wait_until="domcontentloaded"
+        # ----------------------------------------------------
+        # Navigate
+        # ----------------------------------------------------
+
+        try:
+            page.goto(
+                url,
+                wait_until="commit",
+                timeout=15000
+            )
+        except Exception as error:
+            print(
+                f"[Browser] Navigation warning: {error}"
+            )
+
+        # ----------------------------------------------------
+        # Wait for Google results to actually appear
+        # ----------------------------------------------------
+
+        print("[Browser] Waiting for Google results...")
+
+        try:
+            page.wait_for_selector(
+                "h3",
+                timeout=10000,
+                state="visible"
+            )
+        except Exception:
+            print(
+                "[Browser] h3 results not detected yet."
+            )
+
+        # Give the page a little additional rendering time
+        try:
+            page.wait_for_timeout(3000)
+        except Exception:
+            pass
+
+        # ----------------------------------------------------
+        # DEBUG
+        # ----------------------------------------------------
+
+        try:
+            print(
+                "[Browser Debug] Current URL:",
+                page.url
+            )
+
+            print(
+                "[Browser Debug] Page title:",
+                page.title()
+            )
+
+            body_text = page.locator(
+                "body"
+            ).inner_text()
+
+            print(
+                "[Browser Debug] Page text preview:"
+            )
+
+            print(
+                body_text[:3000]
+            )
+
+        except Exception as error:
+            print(
+                f"[Browser Debug] Inspection failed: {error}"
+            )
+
+        # ----------------------------------------------------
+        # Extract results
+        # ----------------------------------------------------
+
+        results = []
+
+        try:
+            headings = page.locator("h3")
+
+            heading_count = headings.count()
+
+            print(
+                f"[Browser] h3 elements detected: {heading_count}"
+            )
+
+            for i in range(min(heading_count, 20)):
+
+                try:
+                    heading = headings.nth(i)
+
+                    if not heading.is_visible():
+                        continue
+
+                    title = heading.inner_text().strip()
+
+                    if not title:
+                        continue
+
+                    # ------------------------------------------------
+                    # Get the URL using JavaScript
+                    # ------------------------------------------------
+                    #
+                    # Google changes its DOM structure frequently.
+                    # Instead of relying on XPath, ask the browser:
+                    #
+                    # "What is the closest <a> element?"
+                    #
+                    href = heading.evaluate(
+                        """
+                        (element) => {
+                            const link = element.closest("a");
+                            return link ? link.href : null;
+                        }
+                        """
+                    )
+
+                    if not href:
+                        print(
+                            f"[Browser] No link found for: {title}"
+                        )
+                        continue
+
+                    # ------------------------------------------------
+                    # Only accept normal HTTP/HTTPS URLs
+                    # ------------------------------------------------
+
+                    if not (
+                        href.startswith("http://")
+                        or href.startswith("https://")
+                    ):
+                        continue
+
+                    # ------------------------------------------------
+                    # Remove duplicates
+                    # ------------------------------------------------
+
+                    if any(
+                        item["url"] == href
+                        for item in results
+                    ):
+                        continue
+
+                    # ------------------------------------------------
+                    # Save result
+                    # ------------------------------------------------
+
+                    results.append({
+                        "position": len(results) + 1,
+                        "title": title,
+                        "url": href
+                    })
+
+                    print(
+                        f"[Browser] Result {len(results)}: "
+                        f"{title} -> {href}"
+                    )
+
+                    # Maximum 10 results
+                    if len(results) >= 10:
+                        break
+
+                except Exception as error:
+
+                    print(
+                        f"[Browser] Could not read result "
+                        f"{i + 1}: {error}"
+                    )
+
+        except Exception as error:
+
+            print(
+                f"[Browser] Result extraction failed: {error}"
+            )
+
+        # ----------------------------------------------------
+        # Print results
+        # ----------------------------------------------------
+
+        print(
+            f"[Browser] Google results found: {len(results)}"
         )
 
-        return f"Searching Google for: {query}"
+        for result in results:
+            print(
+                f"  {result['position']}. "
+                f"{result['title']} -> "
+                f"{result['url']}"
+            )
+
+        # ----------------------------------------------------
+        # Return structured result
+        # ----------------------------------------------------
+
+        return {
+            "success": True,
+            "engine": "google",
+            "query": query,
+            "url": page.url,
+            "results": results,
+            "count": len(results),
+            "message": (
+                f"Found {len(results)} Google "
+                f"search result(s) for: {query}"
+            )
+        }
 
     except Exception as error:
-        return f"Google search failed: {error}"
+        return {
+            "success": False,
+            "error": f"Google search failed: {error}"
+        }
 
 
 # ============================================================
@@ -459,10 +917,13 @@ def open_website(name):
             f"[Browser] Opening website: {name}"
         )
 
-        page.goto(
-            url,
-            wait_until="domcontentloaded"
-        )
+        result = navigate_page(page, url)
+
+        if not result["success"]:
+            return (
+                f"Could not open {name}: "
+                f"{result['error']}"
+            )
 
         return f"Opened {name}."
 
@@ -595,32 +1056,49 @@ def browser_refresh():
 def close_browser():
     global _playwright
     global _browser
+    global _context
     global _page
+    global _pages
     global _active_page_index
 
     try:
+        print("[Browser] Closing browser...")
+
+        if _context is not None:
+            try:
+                _context.close()
+            except Exception:
+                pass
+
         if _browser is not None:
-            _browser.close()
+            try:
+                _browser.close()
+            except Exception:
+                pass
 
         if _playwright is not None:
-            _playwright.stop()
+            try:
+                _playwright.stop()
+            except Exception:
+                pass
 
-        _page = None
-        _browser = None
         _playwright = None
-        _pages.clear()
+        _browser = None
+        _context = None
+        _page = None
+        _pages = []
         _active_page_index = 0
 
-        return "Browser closed."
+        return {
+            "success": True,
+            "message": "Browser closed."
+        }
 
     except Exception as error:
-        _page = None
-        _browser = None
-        _playwright = None
-        _pages.clear()
-        _active_page_index = 0
-
-        return f"Browser close error: {error}"
+        return {
+            "success": False,
+            "error": str(error)
+        }
 
 # ============================================================
 # FIND ELEMENT

@@ -294,6 +294,133 @@ def fast_command(user_message):
                 "tool": "get_screen_size",
                 "args": {}
             }
+
+# -------------------------------------------------
+# LIST BROWSER TABS
+# -------------------------------------------------
+
+    if lower in [
+        "list tabs",
+        "show tabs",
+        "show browser tabs",
+        "what tabs are open",
+        "which tabs are open",
+        "list browser tabs"
+    ]:
+        return {
+            "type": "tool",
+            "tool": "browser_list_tabs",
+            "args": {}
+        }
+
+# -------------------------------------------------
+# NEXT BROWSER TAB
+# -------------------------------------------------
+
+    if lower in [
+        "next tab",
+        "switch to next tab",
+        "go to next tab",
+        "next browser tab"
+    ]:
+        return {
+            "type": "tool",
+            "tool": "browser_next_tab",
+            "args": {}
+        }
+
+# -------------------------------------------------
+# PREVIOUS BROWSER TAB
+# -------------------------------------------------
+
+    if lower in [
+        "previous tab",
+        "prev tab",
+        "switch to previous tab",
+        "go to previous tab",
+        "previous browser tab"
+    ]:
+        return {
+            "type": "tool",
+            "tool": "browser_previous_tab",
+            "args": {}
+        }
+
+# -------------------------------------------------
+# CLOSE CURRENT TAB
+# -------------------------------------------------
+
+    if lower in [
+        "close tab",
+        "close current tab",
+        "close this tab",
+        "close browser tab"
+    ]:
+        return {
+            "type": "tool",
+            "tool": "browser_close_tab",
+            "args": {}
+        }
+
+# --------------------------------------------------------
+# CHROME PROFILE COMMANDS
+# --------------------------------------------------------
+
+# OPEN NEW TAB IN SPECIFIC CHROME PROFILE
+    profile_tab_match = re.match(
+        r"^(open|create)\s+(?:a\s+)?new\s+tab\s+(?:in|on)\s+(.+?)\s+profile$",
+        lower
+    )
+
+    if profile_tab_match:
+        profile_name = profile_tab_match.group(2).strip()
+
+        return {
+            "type": "tool",
+            "tool": "open_chrome_profile",
+            "args": {
+                "profile_name": profile_name,
+                "open_new_tab": True
+            }
+        }
+
+
+    # OPEN WEBSITE IN SPECIFIC CHROME PROFILE
+    profile_website_match = re.match(
+        r"^(open|launch|start)\s+(.+?)\s+in\s+(?:my\s+)?(.+?)\s+profile$",
+        lower
+    )
+
+    if profile_website_match:
+        website = profile_website_match.group(2).strip()
+        profile_name = profile_website_match.group(3).strip()
+
+        return {
+            "type": "tool",
+            "tool": "open_chrome_profile",
+            "args": {
+                "profile_name": profile_name,
+                "website": website
+            }
+        }
+
+
+    # CURRENT CHROME PROFILE
+    if lower in [
+        "current profile",
+        "current chrome profile",
+        "which profile am i using",
+        "what profile am i using",
+        "what is my current profile",
+        "what's my current profile",
+        "which chrome profile is open"
+    ]:
+        return {
+            "type": "tool",
+            "tool": "get_current_chrome_profile",
+            "args": {}
+        }
+
 # --------------------------------------------------------
 # OPEN CHROME PROFILE
 # --------------------------------------------------------
@@ -361,9 +488,47 @@ def fast_command(user_message):
                 }
             }
 
-        # --------------------------------------------------------
-        # OPEN APPLICATION
-        # --------------------------------------------------------
+# --------------------------------------------------------
+# NEW BROWSER TAB
+# --------------------------------------------------------
+
+    new_tab_patterns = [
+        r"^open\s+(a\s+)?new\s+tab$",
+        r"^open\s+new\s+browser\s+tab$",
+        r"^new\s+tab$",
+        r"^create\s+(a\s+)?new\s+tab$",
+    ]
+
+    if any(re.search(pattern, lower) for pattern in new_tab_patterns):
+        return {
+            "type": "tool",
+            "tool": "browser_new_tab",
+            "args": {}
+        }
+
+# --------------------------------------------------------
+# OPEN NEW BROWSER TAB
+# --------------------------------------------------------
+
+    new_tab_match = re.match(
+        r"^(open|create)\s+(a\s+)?new\s+(browser\s+)?tab(?:\s+(.+))?$",
+        lower
+    )
+
+    if new_tab_match:
+        url = new_tab_match.group(4)
+
+        return {
+            "type": "tool",
+            "tool": "browser_new_tab",
+            "args": {
+                "url": url
+            } if url else {}
+        }
+
+    # --------------------------------------------------------
+    # OPEN APPLICATION
+    # --------------------------------------------------------
 
         open_match = re.match(
             r"^(open|launch|start|run)\s+(.+)$",
