@@ -1,6 +1,11 @@
 from playwright.sync_api import sync_playwright
 from urllib.parse import quote_plus
 
+import os
+import subprocess
+import time
+import urllib.request
+
 
 # ============================================================
 # PERSISTENT BROWSER ENGINE
@@ -13,6 +18,29 @@ _page = None
 
 _pages = []
 _active_page_index = 0
+
+# ============================================================
+# HAMMU CHROME CONFIGURATION
+# ============================================================
+
+HAMMU_CHROME_PORT = 9222
+
+HAMMU_CHROME_DATA = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    "hammu_chrome"
+)
+
+CHROME_PATHS = [
+    os.path.expandvars(
+        r"%PROGRAMFILES%\Google\Chrome\Application\chrome.exe"
+    ),
+    os.path.expandvars(
+        r"%PROGRAMFILES(X86)%\Google\Chrome\Application\chrome.exe"
+    ),
+    os.path.expandvars(
+        r"%LOCALAPPDATA%\Google\Chrome\Application\chrome.exe"
+    ),
+]
 
 # ============================================================
 # NAVIGATION HELPER
@@ -44,6 +72,151 @@ def navigate_page(page, url, timeout=15000):
             "error": str(error)
         }
 
+
+    # ============================================================
+# FIND CHROME
+# ============================================================
+
+def get_chrome_executable():
+    for path in CHROME_PATHS:
+        if os.path.exists(path):
+            return path
+
+    return None
+
+
+# ============================================================
+# CHECK CHROME CDP
+# ============================================================
+
+def chrome_cdp_available():
+    try:
+        with urllib.request.urlopen(
+            f"http://127.0.0.1:{HAMMU_CHROME_PORT}/json/version",
+            timeout=1
+        ) as response:
+
+            return response.status == 200
+
+    except Exception:
+        return False
+
+
+# ============================================================
+# START HAMMU CHROME AUTOMATICALLY
+# ============================================================
+
+def start_hammu_chrome():
+    """
+    Start a dedicated persistent Chrome instance for HAMMU.
+
+    This does NOT touch the user's normal Chrome profile.
+    """
+
+    # --------------------------------------------------------
+    # Chrome is already running on our CDP port
+    # --------------------------------------------------------
+
+    if chrome_cdp_available():
+        print(
+            f"[Browser] Chrome already running on "
+            f"port {HAMMU_CHROME_PORT}."
+        )
+
+        return True
+
+    # --------------------------------------------------------
+    # Find Chrome executable
+    # --------------------------------------------------------
+
+    chrome_path = get_chrome_executable()
+
+    if not chrome_path:
+        print("[Browser Error] Google Chrome was not found.")
+        return False
+
+    # --------------------------------------------------------
+    # Create persistent HAMMU Chrome directory
+    # --------------------------------------------------------
+
+    os.makedirs(
+        HAMMU_CHROME_DATA,
+        exist_ok=True
+    )
+
+    # --------------------------------------------------------
+    # Build Chrome command
+    # --------------------------------------------------------
+
+    chrome_command = [
+        chrome_path,
+
+        f"--remote-debugging-port={HAMMU_CHROME_PORT}",
+
+        f"--user-data-dir={HAMMU_CHROME_DATA}",
+
+        "--remote-allow-origins=http://localhost",
+
+        "--no-first-run",
+
+        "--no-default-browser-check",
+    ]
+
+    # --------------------------------------------------------
+    # Start Chrome
+    # --------------------------------------------------------
+
+    try:
+
+        print("[Browser] HAMMU Chrome is not running.")
+        print("[Browser] Starting HAMMU Chrome...")
+        print(
+            f"[Browser] Data directory: "
+            f"{HAMMU_CHROME_DATA}"
+        )
+
+        subprocess.Popen(
+            chrome_command,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+
+    except Exception as error:
+
+        print(
+            f"[Browser Error] Could not start Chrome: {error}"
+        )
+
+        return False
+
+    # --------------------------------------------------------
+    # Wait for CDP
+    # --------------------------------------------------------
+
+    print(
+        f"[Browser] Waiting for Chrome on "
+        f"port {HAMMU_CHROME_PORT}..."
+    )
+
+    for _ in range(30):
+
+        if chrome_cdp_available():
+
+            print(
+                "[Browser] Chrome remote debugging is ready."
+            )
+
+            return True
+
+        time.sleep(0.5)
+
+    print(
+        "[Browser Error] Chrome started, "
+        "but CDP did not become available."
+    )
+
+    return False
+
 # ============================================================
 # START BROWSER
 # ============================================================
@@ -57,22 +230,30 @@ def start_browser():
     global _pages
     global _active_page_index
 
-    # Browser is already connected
+    # ========================================================
+    # BROWSER ALREADY CONNECTED
+    # ========================================================
+
     if (
         _browser is not None
         and _context is not None
         and _page is not None
     ):
         try:
+
             if (
                 _browser.is_connected()
                 and not _page.is_closed()
             ):
                 return _page
+
         except Exception:
             pass
 
-    # Reset old browser state
+    # ========================================================
+    # RESET OLD STATE
+    # ========================================================
+
     _playwright = None
     _browser = None
     _context = None
@@ -81,41 +262,57 @@ def start_browser():
     _active_page_index = 0
 
     try:
+
+        # ====================================================
+        # START CHROME AUTOMATICALLY
+        # ====================================================
+
+        if not chrome_cdp_available():
+
+            if not start_hammu_chrome():
+
+                return None
+
+        # ====================================================
+        # START PLAYWRIGHT
+        # ====================================================
+
         print("[Browser] Starting Playwright...")
 
         _playwright = sync_playwright().start()
 
-        print("[Browser] Connecting to Chrome on port 9222...")
+        # ====================================================
+        # CONNECT TO HAMMU CHROME
+        # ====================================================
+
+        print(
+            f"[Browser] Connecting to Chrome on "
+            f"port {HAMMU_CHROME_PORT}..."
+        )
 
         _browser = _playwright.chromium.connect_over_cdp(
-            "http://127.0.0.1:9222"
+            f"http://127.0.0.1:{HAMMU_CHROME_PORT}"
         )
 
         print("[Browser] Connected to Chrome.")
 
-        # --------------------------------------------------------
-        # Get existing Chrome contexts
-        # --------------------------------------------------------
+        # ====================================================
+        # GET CONTEXT
+        # ====================================================
 
         contexts = _browser.contexts
 
         if not contexts:
+
             print("[Browser] No Chrome context found.")
-
-            _browser.close()
-            _playwright.stop()
-
-            _browser = None
-            _playwright = None
 
             return None
 
-        # Use the existing Chrome context
         _context = contexts[0]
 
-        # --------------------------------------------------------
-        # Get existing Chrome tabs
-        # --------------------------------------------------------
+        # ====================================================
+        # GET EXISTING TABS
+        # ====================================================
 
         _pages = [
             page
@@ -123,21 +320,27 @@ def start_browser():
             if not page.is_closed()
         ]
 
+        # ====================================================
+        # CREATE FIRST TAB IF NECESSARY
+        # ====================================================
+
         if not _pages:
-            print("[Browser] No Chrome tabs found.")
 
-            _browser.close()
-            _playwright.stop()
+            print("[Browser] No tabs found. Creating one...")
 
-            _browser = None
-            _context = None
-            _playwright = None
+            _page = _context.new_page()
 
-            return None
+            _pages = [_page]
 
-        # Use the first existing tab
+        else:
+
+            _page = _pages[0]
+
         _active_page_index = 0
-        _page = _pages[_active_page_index]
+
+        # ====================================================
+        # BRING HAMMU TAB TO FRONT
+        # ====================================================
 
         try:
             _page.bring_to_front()
@@ -146,7 +349,7 @@ def start_browser():
 
         print(
             f"[Browser] Connected to Chrome with "
-            f"{len(_pages)} existing tab(s)."
+            f"{len(_pages)} tab(s)."
         )
 
         print("[Browser] Browser ready.")
@@ -154,19 +357,24 @@ def start_browser():
         return _page
 
     except Exception as error:
+
         print(
-            f"[Browser Error] Could not connect to Chrome: {error}"
+            f"[Browser Error] Could not start browser: {error}"
         )
 
         try:
+
             if _browser is not None:
                 _browser.close()
+
         except Exception:
             pass
 
         try:
+
             if _playwright is not None:
                 _playwright.stop()
+
         except Exception:
             pass
 
@@ -178,95 +386,6 @@ def start_browser():
         _active_page_index = 0
 
         return None
-
-# def start_browser():
-#     global _playwright
-#     global _browser
-#     global _context
-#     global _page
-#     global _pages
-#     global _active_page_index
-
-#     # Browser is already running
-#     if (
-#         _browser is not None
-#         and _context is not None
-#         and _page is not None
-#     ):
-#         try:
-#             if (
-#                 _browser.is_connected()
-#                 and not _page.is_closed()
-#             ):
-#                 return _page
-#         except Exception:
-#             pass
-
-#     # Reset old browser state
-#     _playwright = None
-#     _browser = None
-#     _context = None
-#     _page = None
-#     _pages = []
-#     _active_page_index = 0
-
-#     try:
-#         print("[Browser] Starting Playwright...")
-
-#         _playwright = sync_playwright().start()
-
-#         print("[Browser] Launching Chromium...")
-
-#         _browser = _playwright.chromium.launch(
-#             headless=False
-#         )
-
-#         # IMPORTANT:
-#         # Create ONE browser context.
-#         # All pages inside this context behave like tabs.
-#         _context = _browser.new_context()
-
-#         # Create the first tab
-#         _page = _context.new_page()
-
-#         _pages = [_page]
-#         _active_page_index = 0
-
-#         print("[Browser] Browser ready.")
-
-#         return _page
-
-#     except Exception as error:
-#         print(
-#             f"[Browser Error] Could not start browser: {error}"
-#         )
-
-#         try:
-#             if _context is not None:
-#                 _context.close()
-#         except Exception:
-#             pass
-
-#         try:
-#             if _browser is not None:
-#                 _browser.close()
-#         except Exception:
-#             pass
-
-#         try:
-#             if _playwright is not None:
-#                 _playwright.stop()
-#         except Exception:
-#             pass
-
-#         _playwright = None
-#         _browser = None
-#         _context = None
-#         _page = None
-#         _pages = []
-#         _active_page_index = 0
-
-#         return None
 
 
 # ============================================================
