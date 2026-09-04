@@ -73,6 +73,8 @@ from tools.vision import analyze_screen
 from tools.windows import get_active_window
 from tools.windows import get_work_context
 
+from tools.calculator import calculate
+
 
 # ============================================================
 # TOOL EXECUTOR
@@ -82,6 +84,15 @@ def execute_tool(tool_name, args):
 
     if not isinstance(args, dict):
         return "Security blocked the operation: invalid arguments."
+
+    # Calculator
+    if tool_name == "calculator":
+
+        return calculate(
+            args.get("operation"),
+            args.get("numbers", [])
+        )
+
 
     # ========================================================
     # TOOLS THAT REQUIRE A PATH

@@ -42,6 +42,7 @@ numpy
 # PHASE 9 - Voice Input (Speech-to-Text)
 # ------------------------------------------------------------
 SpeechRecognition
+sounddevice
 #PyAudio
 
 # ------------------------------------------------------------
@@ -58,6 +59,7 @@ PySide6
 # Utility / Configuration
 # ------------------------------------------------------------
 python-dotenv
+
 
 # ------------------------------------------------------------
 # Optional: Better HTTP / API support for future expansion

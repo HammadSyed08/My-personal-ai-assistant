@@ -8,7 +8,7 @@ import sounddevice as sd
 import webbrowser  # Natively opens web browsers and searches URLs
 
 # Track the last active path used by the agent to handle context (like renaming a folder you just made)
-CURRENT_WORKING_DIR = "D:\\"
+CURRENT_WORKING_DIR = "E:\\"
 
 def execute_system_action(action_type, details, original_phrase=""):
     global CURRENT_WORKING_DIR

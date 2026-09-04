@@ -132,6 +132,36 @@ locate_and_click:
 get_screen_size:
 {}
 
+
+BROWSER RULES:
+
+- "close new tab" means close the current browser TAB, not the browser application.
+- "close tab" means use browser_close_tab.
+- "close this tab" means use browser_close_tab.
+- "open new tab" means use browser_new_tab.
+- "next tab" means use browser_next_tab.
+- "previous tab" means use browser_previous_tab.
+- "close Chrome" or "close browser" means use close_application only when the user explicitly wants the entire browser application closed.
+- NEVER use close_application for "close tab", "close new tab", or "close this tab".
+
+APPLICATION RULES:
+- "open calculator" means open the Calculator application using open_application.
+- "launch calculator" means open the Calculator application using open_application.
+- "start calculator" means open the Calculator application using open_application.
+- If the user says only "calculator" or asks to open the calculator, use open_application.
+- NEVER use the calculator tool when the user only wants to open the Calculator application.
+
+CALCULATOR RULES:
+- Use the calculator tool ONLY when the user asks to perform a mathematical calculation.
+- calculator requires:
+- operation: add, subtract, multiply, or divide
+- numbers: a list of numbers
+- "add 4 and 7" means calculator with operation "add" and numbers [4, 7].
+- "multiply 4 by 7" means calculator with operation "multiply" and numbers [4, 7].
+- "subtract 7 from 10" means calculator with operation "subtract" and numbers [10, 7].
+- "divide 20 by 4" means calculator with operation "divide" and numbers [20, 4].
+- NEVER use calculator when there are no numbers.
+
 Rules:
 
 1. Use tools for computer actions.
@@ -149,6 +179,60 @@ Rules:
 13. For multiple actions, return a plan.
 """
 
+def fast_chat(user_message):
+    text = user_message.lower().strip()
+
+    greetings = {
+        "hello": "Hello! I'm Hammu. How can I help you?",
+        "hi": "Hi! I'm Hammu. What can I do for you?",
+        "hey": "Hey! How can I help?",
+        "good morning": "Good morning! How can I help you today?",
+        "good afternoon": "Good afternoon! What can I do for you?",
+        "good evening": "Good evening! How can I help?"
+    }
+
+    return greetings.get(text)
+
+# ============================================================
+# Math Expression Parser
+# ============================================================
+
+def parse_math_expression(user_message):
+    """
+    Detect simple mathematical expressions and convert them
+    into the existing calculator tool format.
+    """
+
+    text = user_message.strip()
+
+    match = re.fullmatch(
+        r"(-?\d+(?:\.\d+)?)\s*([+\-*/])\s*(-?\d+(?:\.\d+)?)",
+        text
+    )
+
+    if not match:
+        return None
+
+    first = float(match.group(1))
+    operator = match.group(2)
+    second = float(match.group(3))
+
+    operation_map = {
+        "+": "add",
+        "-": "subtract",
+        "*": "multiply",
+        "/": "divide",
+    }
+
+    return {
+        "type": "tool",
+        "tool": "calculator",
+        "args": {
+            "operation": operation_map[operator],
+            "numbers": [first, second]
+        }
+    }
+
 
 # ============================================================
 # FAST LOCAL COMMAND DETECTION
@@ -163,6 +247,31 @@ def fast_command(user_message):
 
     text = user_message.strip()
     lower = text.lower()
+
+    # Browser tab controls
+    if re.search(r"\b(close|close the)\s+(new\s+)?tab\b", text):
+        return {
+            "type": "tool",
+            "tool": "browser_close_tab",
+            "args": {}
+        }
+
+    # --------------------------------------------------------
+    # SIMPLE MATH EXPRESSIONS
+    # --------------------------------------------------------
+
+    math_result = parse_math_expression(text)
+
+    if math_result is not None:
+        return math_result
+    
+    local_response = fast_chat(text)
+
+    if local_response is not None:
+        return {
+            "type": "chat",
+            "response": local_response
+        }
 
     # --------------------------------------------------------
     # SCREENSHOT
@@ -1004,19 +1113,17 @@ def ask_ai(user_message):
 
     try:
         response = ollama.chat(
-            model=OLLAMA_MODEL,
-            messages=[
-                {
-                    "role": "system",
-                    "content": SYSTEM_PROMPT
-                },
-                {
-                    "role": "user",
-                    "content": user_message
-                }
-            ],
-            format="json"
-        )
+        model=OLLAMA_MODEL,
+        messages=[
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": user_message}
+        ],
+        format="json",
+        options={
+            "num_ctx": 2048
+        },
+        keep_alive="30m"
+    )
 
         content = response["message"]["content"]
 

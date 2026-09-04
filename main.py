@@ -1,4 +1,44 @@
 from core.command_engine import process_command
+from voice.speech_to_text import speech_to_text
+
+# ============================================================
+# Voice MODE
+# ============================================================
+
+def run_voice_mode():
+
+    print("\n" + "=" * 50)
+    print("🎤 HAMMU VOICE MODE")
+    print("=" * 50)
+
+    print("Say your command.")
+    print("Say 'exit voice mode' to return to keyboard mode.")
+
+    while True:
+
+        text = speech_to_text.listen()
+
+        # Nothing recognized
+        if not text:
+            continue
+
+        # Check for voice-mode exit
+        if text.lower().strip() in [
+        "exit voice",
+        "exit voice mode",
+        "quit voice",
+        "quit voice mode",
+        "stop voice",
+        "stop voice mode",
+        "keyboard mode"
+    ]:
+            print("\n⌨️ Returning to keyboard mode...")
+            break
+
+        # Send voice text to the SAME command engine
+        result = process_command(text)
+
+        print("\nAssistant:", result)
 
 # ============================================================
 # MAIN PROGRAM
@@ -25,6 +65,10 @@ def main():
 
             print("Assistant: Goodbye!")
             break
+
+        if user_input.lower() == "voice":
+            run_voice_mode()
+            continue
 
         result = process_command(user_input)
 
