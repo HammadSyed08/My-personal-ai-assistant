@@ -712,11 +712,74 @@ def open_url(url):
             "error": f"Could not open URL: {error}"
         }
 
+
+
 # ============================================================
 # GOOGLE SEARCH
 # ============================================================
 
+
+def resolve_google_url(page, google_url):
+    """
+    Resolve a Google /goto tracking URL to its final destination.
+    """
+
+    if not google_url:
+        return None
+
+    if "/goto?" not in google_url:
+        return google_url
+
+    try:
+        original_url = page.url
+
+        # Open the Google redirect in a temporary tab.
+        new_page = page.context.new_page()
+
+        try:
+            new_page.goto(
+                google_url,
+                wait_until="commit",
+                timeout=10000
+            )
+
+            new_page.wait_for_timeout(1500)
+
+            final_url = new_page.url
+
+            print(
+                f"[Browser] Google redirect resolved:"
+                f"\n    From: {google_url}"
+                f"\n    To:   {final_url}"
+            )
+
+            return final_url
+
+        finally:
+            try:
+                new_page.close()
+            except Exception:
+                pass
+
+    except Exception as error:
+
+        print(
+            f"[Browser] Could not resolve Google URL: "
+            f"{error}"
+        )
+
+        return google_url
 def google_search(query):
+    """
+    Search Google using the persistent HAMMU Chrome browser.
+
+    Returns structured search results that can later be used
+    by the browser-context system for commands such as:
+
+        "open the first result"
+        "open result 2"
+    """
+
     if not query:
         return {
             "success": False,
@@ -724,12 +787,20 @@ def google_search(query):
         }
 
     try:
+        # --------------------------------------------------------
+        # BUILD GOOGLE SEARCH URL
+        # --------------------------------------------------------
+
         encoded_query = quote_plus(query)
 
         url = (
             "https://www.google.com/search?q="
             + encoded_query
         )
+
+        # --------------------------------------------------------
+        # GET ACTIVE BROWSER PAGE
+        # --------------------------------------------------------
 
         page = get_browser_page()
 
@@ -743,47 +814,38 @@ def google_search(query):
             f"[Browser] Searching Google for: {query}"
         )
 
-        # ----------------------------------------------------
-        # Navigate
-        # ----------------------------------------------------
+        # --------------------------------------------------------
+        # NAVIGATE
+        # --------------------------------------------------------
 
-        try:
-            page.goto(
-                url,
-                wait_until="commit",
-                timeout=15000
-            )
-        except Exception as error:
+        navigation = navigate_page(
+            page,
+            url,
+            timeout=15000
+        )
+
+        if not navigation["success"]:
             print(
-                f"[Browser] Navigation warning: {error}"
+                "[Browser] Navigation warning:",
+                navigation["error"]
             )
 
-        # ----------------------------------------------------
-        # Wait for Google results to actually appear
-        # ----------------------------------------------------
+        # --------------------------------------------------------
+        # WAIT FOR GOOGLE PAGE
+        # --------------------------------------------------------
 
-        print("[Browser] Waiting for Google results...")
+        print(
+            "[Browser] Waiting for Google search page..."
+        )
 
         try:
-            page.wait_for_selector(
-                "h3",
-                timeout=10000,
-                state="visible"
-            )
-        except Exception:
-            print(
-                "[Browser] h3 results not detected yet."
-            )
-
-        # Give the page a little additional rendering time
-        try:
-            page.wait_for_timeout(3000)
+            page.wait_for_timeout(2000)
         except Exception:
             pass
 
-        # ----------------------------------------------------
-        # DEBUG
-        # ----------------------------------------------------
+        # --------------------------------------------------------
+        # DEBUG PAGE STATE
+        # --------------------------------------------------------
 
         try:
             print(
@@ -795,6 +857,75 @@ def google_search(query):
                 "[Browser Debug] Page title:",
                 page.title()
             )
+
+        except Exception as error:
+
+            print(
+                f"[Browser Debug] Page information failed: {error}"
+            )
+
+        # --------------------------------------------------------
+        # WAIT FOR SEARCH RESULTS
+        # --------------------------------------------------------
+
+        result_selectors = [
+            "div.MjjYud h3",
+            "div.g h3",
+            "h3"
+        ]
+
+        result_selector_found = None
+
+        for selector in result_selectors:
+
+            try:
+
+                print(
+                    f"[Browser] Checking selector: {selector}"
+                )
+
+                page.wait_for_selector(
+                    selector,
+                    timeout=5000,
+                    state="visible"
+                )
+
+                locator = page.locator(selector)
+
+                if locator.count() > 0:
+
+                    result_selector_found = selector
+
+                    print(
+                        "[Browser] Result selector found:",
+                        selector
+                    )
+
+                    break
+
+            except Exception:
+                continue
+
+        if result_selector_found is None:
+
+            print(
+                "[Browser] Google results were not detected."
+            )
+
+        # --------------------------------------------------------
+        # EXTRA RENDERING TIME
+        # --------------------------------------------------------
+
+        try:
+            page.wait_for_timeout(1500)
+        except Exception:
+            pass
+
+        # --------------------------------------------------------
+        # DEBUG PAGE TEXT
+        # --------------------------------------------------------
+
+        try:
 
             body_text = page.locator(
                 "body"
@@ -809,52 +940,72 @@ def google_search(query):
             )
 
         except Exception as error:
+
             print(
-                f"[Browser Debug] Inspection failed: {error}"
+                f"[Browser Debug] Could not read page text: {error}"
             )
 
-        # ----------------------------------------------------
-        # Extract results
-        # ----------------------------------------------------
+        # --------------------------------------------------------
+        # EXTRACT RESULTS
+        # --------------------------------------------------------
 
         results = []
 
         try:
-            headings = page.locator("h3")
+
+            if result_selector_found:
+
+                headings = page.locator(
+                    result_selector_found
+                )
+
+            else:
+
+                headings = page.locator(
+                    "h3"
+                )
 
             heading_count = headings.count()
 
             print(
-                f"[Browser] h3 elements detected: {heading_count}"
+                f"[Browser] h3 elements detected: "
+                f"{heading_count}"
             )
 
-            for i in range(min(heading_count, 20)):
+            for i in range(
+                min(heading_count, 20)
+            ):
 
                 try:
+
                     heading = headings.nth(i)
 
                     if not heading.is_visible():
                         continue
 
-                    title = heading.inner_text().strip()
+                    title = (
+                        heading
+                        .inner_text()
+                        .strip()
+                    )
 
                     if not title:
                         continue
 
                     # ------------------------------------------------
-                    # Get the URL using JavaScript
+                    # FIND CLOSEST LINK
                     # ------------------------------------------------
-                    #
-                    # Google changes its DOM structure frequently.
-                    # Instead of relying on XPath, ask the browser:
-                    #
-                    # "What is the closest <a> element?"
-                    #
+
                     href = heading.evaluate(
                         """
                         (element) => {
                             const link = element.closest("a");
-                            return link ? link.href : null;
+
+                            if (!link) {
+                                return null;
+                            }
+
+                            return link.href;
                         }
                         """
                     )
@@ -866,17 +1017,36 @@ def google_search(query):
                         continue
 
                     # ------------------------------------------------
-                    # Only accept normal HTTP/HTTPS URLs
+                    # VALIDATE URL
                     # ------------------------------------------------
+
+                    if not href:
+                        print(
+                            f"[Browser] No link found for: "
+                            f"{title}"
+                        )
+                        continue
 
                     if not (
                         href.startswith("http://")
-                        or href.startswith("https://")
+                        or
+                        href.startswith("https://")
                     ):
                         continue
 
                     # ------------------------------------------------
-                    # Remove duplicates
+                    # IGNORE GOOGLE INTERNAL LINKS
+                    # ------------------------------------------------
+
+                    if (
+                        "google.com/search" in href
+                        or
+                        "accounts.google.com" in href
+                    ):
+                        continue
+
+                    # ------------------------------------------------
+                    # REMOVE DUPLICATES
                     # ------------------------------------------------
 
                     if any(
@@ -886,17 +1056,26 @@ def google_search(query):
                         continue
 
                     # ------------------------------------------------
-                    # Save result
+                    # SAVE RESULT
                     # ------------------------------------------------
+
+                    resolved_url = resolve_google_url(
+                        page,
+                        href
+                    )
+
+                    if not resolved_url:
+                        continue
 
                     results.append({
                         "position": len(results) + 1,
                         "title": title,
-                        "url": href
+                        "url": resolved_url
                     })
 
                     print(
-                        f"[Browser] Result {len(results)}: "
+                        f"[Browser] Result "
+                        f"{len(results)}: "
                         f"{title} -> {href}"
                     )
 
@@ -907,34 +1086,37 @@ def google_search(query):
                 except Exception as error:
 
                     print(
-                        f"[Browser] Could not read result "
-                        f"{i + 1}: {error}"
+                        f"[Browser] Could not read "
+                        f"result {i + 1}: {error}"
                     )
 
         except Exception as error:
 
             print(
-                f"[Browser] Result extraction failed: {error}"
+                f"[Browser] Result extraction failed: "
+                f"{error}"
             )
 
-        # ----------------------------------------------------
-        # Print results
-        # ----------------------------------------------------
+        # --------------------------------------------------------
+        # FINAL RESULT REPORT
+        # --------------------------------------------------------
 
         print(
-            f"[Browser] Google results found: {len(results)}"
+            f"[Browser] Google results found: "
+            f"{len(results)}"
         )
 
         for result in results:
+
             print(
                 f"  {result['position']}. "
                 f"{result['title']} -> "
                 f"{result['url']}"
             )
 
-        # ----------------------------------------------------
-        # Return structured result
-        # ----------------------------------------------------
+        # --------------------------------------------------------
+        # RETURN STRUCTURED RESULT
+        # --------------------------------------------------------
 
         return {
             "success": True,
@@ -950,9 +1132,12 @@ def google_search(query):
         }
 
     except Exception as error:
+
         return {
             "success": False,
-            "error": f"Google search failed: {error}"
+            "error": (
+                f"Google search failed: {error}"
+            )
         }
 
 

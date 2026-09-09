@@ -256,6 +256,109 @@ def fast_command(user_message):
             "args": {}
         }
 
+# ============================================================
+# FAST LOCAL CALCULATOR
+# ============================================================
+
+    # add 4 and 7
+    match = re.match(
+        r"^(?:add|plus)\s+(-?\d+(?:\.\d+)?)\s+(?:and|to)\s+(-?\d+(?:\.\d+)?)$",
+        lower
+    )
+
+    if match:
+        return {
+            "type": "tool",
+            "tool": "calculator",
+            "args": {
+                "operation": "add",
+                "numbers": [
+                    float(match.group(1)),
+                    float(match.group(2))
+                ]
+            }
+        }
+
+
+    # subtract 3 from 10
+    match = re.match(
+        r"^subtract\s+(-?\d+(?:\.\d+)?)\s+from\s+(-?\d+(?:\.\d+)?)$",
+        lower
+    )
+
+    if match:
+        return {
+            "type": "tool",
+            "tool": "calculator",
+            "args": {
+                "operation": "subtract",
+                "numbers": [
+                    float(match.group(2)),
+                    float(match.group(1))
+                ]
+            }
+        }
+
+
+    # subtract 10 and 3
+    match = re.match(
+        r"^subtract\s+(-?\d+(?:\.\d+)?)\s+(?:and|by)\s+(-?\d+(?:\.\d+)?)$",
+        lower
+    )
+
+    if match:
+        return {
+            "type": "tool",
+            "tool": "calculator",
+            "args": {
+                "operation": "subtract",
+                "numbers": [
+                    float(match.group(1)),
+                    float(match.group(2))
+                ]
+            }
+        }
+
+
+    # multiply 4 by 5
+    match = re.match(
+        r"^(?:multiply|times)\s+(-?\d+(?:\.\d+)?)\s+(?:by|and)\s+(-?\d+(?:\.\d+)?)$",
+        lower
+    )
+
+    if match:
+        return {
+            "type": "tool",
+            "tool": "calculator",
+            "args": {
+                "operation": "multiply",
+                "numbers": [
+                    float(match.group(1)),
+                    float(match.group(2))
+                ]
+            }
+        }
+
+
+    # divide 20 by 4
+    match = re.match(
+        r"^divide\s+(-?\d+(?:\.\d+)?)\s+by\s+(-?\d+(?:\.\d+)?)$",
+        lower
+    )
+
+    if match:
+        return {
+            "type": "tool",
+            "tool": "calculator",
+            "args": {
+                "operation": "divide",
+                "numbers": [
+                    float(match.group(1)),
+                    float(match.group(2))
+                ]
+            }
+        }
+
     # --------------------------------------------------------
     # SIMPLE MATH EXPRESSIONS
     # --------------------------------------------------------
@@ -1088,42 +1191,27 @@ def fast_command(user_message):
 
 def ask_ai(user_message):
     """
-    Main AI router.
+    Send a command directly to Ollama for AI reasoning.
 
-    Fast commands are handled locally without Ollama.
-    Only commands that require AI reasoning are sent to Ollama.
+    Local commands should already have been handled by
+    fast_command() before this function is called.
     """
-
-    # ============================================================
-    # FAST LOCAL COMMAND ROUTER
-    # ============================================================
-
-    fast_result = fast_command(user_message)
-
-    if fast_result is not None:
-        print("\n[Fast Local Decision]")
-        print(json.dumps(fast_result, indent=4))
-        return fast_result
-
-    # ============================================================
-    # OLLAMA AI FALLBACK
-    # ============================================================
 
     print("\n[AI] Sending request to Ollama...")
 
     try:
         response = ollama.chat(
-        model=OLLAMA_MODEL,
-        messages=[
-            {"role": "system", "content": SYSTEM_PROMPT},
-            {"role": "user", "content": user_message}
-        ],
-        format="json",
-        options={
-            "num_ctx": 2048
-        },
-        keep_alive="30m"
-    )
+            model=OLLAMA_MODEL,
+            messages=[
+                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "user", "content": user_message}
+            ],
+            format="json",
+            options={
+                "num_ctx": 2048
+            },
+            keep_alive="30m"
+        )
 
         content = response["message"]["content"]
 
@@ -1131,6 +1219,7 @@ def ask_ai(user_message):
         print(content)
 
         decision = json.loads(content)
+
         return decision
 
     except json.JSONDecodeError as error:
@@ -1148,9 +1237,3 @@ def ask_ai(user_message):
             "type": "chat",
             "response": "I encountered an AI processing error."
         }
-    """
-    Main AI router.
-
-    Fast commands are handled locally without Ollama.
-    Only commands that require AI reasoning are sent to Ollama.
-    """
