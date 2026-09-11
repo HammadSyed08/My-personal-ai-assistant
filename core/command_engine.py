@@ -1,3 +1,5 @@
+from memory.memory import memory
+from voice.text_to_speech import text_to_speech
 from brain.ollama_brain import ask_ai, fast_command
 from brain.context import context
 from security.permissions import (
@@ -751,6 +753,152 @@ def handle_context_command(user_input):
         }
     }
 
+def speak_response(text):
+    if text:
+        text_to_speech.speak(text)
+
+def handle_memory_command(user_input):
+    text = user_input.strip() 
+    lower_text = text.lower()
+
+    if lower_text.startswith("remember that "): 
+
+        memory_text = text[len("remember that "):].strip() 
+
+        if not memory_text: 
+
+            return { "success": False, "type": "tool", "result": "What would you like me to remember?" }
+        
+        memory.remember(memory_text) 
+        return { "success": True, "type": "tool", "result": f"I'll remember that {memory_text}." } 
+
+    if lower_text in [
+        "what do you remember",
+        "what do you remember?",
+        "show my memories",
+        "show my memory",
+        "recall my memories"
+    ]:
+        memories = memory.recall()
+
+        if not memories:
+            return {
+                "success": True,
+                "type": "tool",
+                "result": "I don't have any memories saved yet."
+            }
+
+        memory_text = "\n".join(
+            f"{memory_id}. {memory_value}"
+            for memory_id, memory_value in memories
+        )
+
+        return {
+            "success": True,
+            "type": "tool",
+            "result": f"Here is what I remember:\n{memory_text}"
+        }
+    
+    if lower_text.startswith("what do you remember about "):
+        keyword = text[len("what do you remember about "):].strip()
+
+        if not keyword:
+            return {
+                "success": False,
+                "type": "tool",
+                "result": "What would you like me to remember?"
+            }
+
+        memories = memory.search(keyword)
+
+        if not memories:
+            return {
+                "success": True,
+                "type": "tool",
+                "result": f"I don't have any memories about {keyword}."
+            }
+
+        memory_text = "\n".join(
+            f"{memory_id}. {memory_value}"
+            for memory_id, memory_value in memories
+        )
+
+        return {
+            "success": True,
+            "type": "tool",
+            "result": f"Here is what I remember about {keyword}:\n{memory_text}"
+        }
+    
+    if lower_text.startswith("what do you remember about "):
+
+        keyword = text[len("what do you remember about "):].strip()
+
+        if not keyword:
+            return {
+                "success": False,
+                "type": "tool",
+                "result": "What would you like me to remember?"
+            }
+
+        memories = memory.search(keyword)
+
+        if not memories:
+            return {
+                "success": True,
+                "type": "tool",
+                "result": f"I don't have any memories about {keyword}."
+            }
+
+        memory_text = "\n".join(
+            f"{memory_id}. {memory_value}"
+            for memory_id, memory_value in memories
+        )
+
+        return {
+            "success": True,
+            "type": "tool",
+            "result": f"Here is what I remember about {keyword}:\n{memory_text}"
+        }
+    
+    if lower_text.startswith("what is my favourite "):
+
+        keyword = text[len("what is my favourite "):].strip()
+
+        if not keyword:
+            return {
+                "success": False,
+                "type": "tool",
+                "result": "What would you like to know?"
+            }
+
+        memories = memory.search(
+            f"favourite {keyword}"
+        )
+
+        if not memories:
+            return {
+                "success": True,
+                "type": "tool",
+                "result": f"I don't have any memories about your favourite {keyword}."
+            }
+
+        memory_value = memories[0][1]
+
+        prefix = f"my favourite {keyword} is "
+
+        if memory_value.lower().startswith(prefix):
+            favourite_value = memory_value[len(prefix):].strip()
+        else:
+            favourite_value = memory_value
+
+        return {
+            "success": True,
+            "type": "tool",
+            "result": f"Your favourite {keyword} is {favourite_value}."
+        }
+        
+    return None
+
 def process_command(user_input):
     """
     Process one HAMMU command.
@@ -758,6 +906,14 @@ def process_command(user_input):
     This function is independent of the user interface.
     Console, voice, and GUI can all use it.
     """
+
+    memory_result = handle_memory_command(user_input)
+
+    if memory_result is not None:
+        speak_response(
+            memory_result.get("result", "")
+        )
+        return memory_result
 
     decision = fast_command(user_input)
 
@@ -781,14 +937,17 @@ def process_command(user_input):
     # --------------------------------------------
 
     if decision_type == "chat":
+        response = decision.get(
+            "response",
+            "I don't have a response."
+        )
+
+        speak_response(response)
 
         return {
             "success": True,
             "type": "chat",
-            "response": decision.get(
-                "response",
-                "I don't have a response."
-            )
+            "response": response
         }
 
     # --------------------------------------------

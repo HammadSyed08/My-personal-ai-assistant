@@ -1,6 +1,7 @@
 import json
 import re
 import ollama
+import time
 
 from config import OLLAMA_MODEL
 
@@ -1199,6 +1200,8 @@ def ask_ai(user_message):
 
     print("\n[AI] Sending request to Ollama...")
 
+    start_time = time.time()
+
     try:
         response = ollama.chat(
             model=OLLAMA_MODEL,
@@ -1212,6 +1215,10 @@ def ask_ai(user_message):
             },
             keep_alive="30m"
         )
+
+        total_time = time.time() - start_time
+
+        print(f"[AI] Ollama response received in {total_time:.2f} seconds")
 
         content = response["message"]["content"]
 

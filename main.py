@@ -24,21 +24,50 @@ def run_voice_mode():
 
         # Check for voice-mode exit
         if text.lower().strip() in [
-        "exit voice",
-        "exit voice mode",
-        "quit voice",
-        "quit voice mode",
-        "stop voice",
-        "stop voice mode",
-        "keyboard mode"
-    ]:
+            "exit voice",
+            "exit voice mode",
+            "quit voice",
+            "quit voice mode",
+            "stop voice",
+            "stop voice mode",
+            "keyboard mode"
+        ]:
             print("\n⌨️ Returning to keyboard mode...")
             break
 
         # Send voice text to the SAME command engine
+        print(f"⚙️ Processing: {text}")
         result = process_command(text)
 
-        print("\nAssistant:", result)
+        if result["type"] == "chat":
+            print(
+                "\nAssistant:",
+                result.get("response", "")
+            )
+
+        elif result["type"] == "tool":
+            print(
+                "\nAssistant:",
+                result.get("result", "")
+            )
+
+        elif result["type"] == "plan":
+            for item in result.get("results", []):
+                print(
+                    f"[{item.get('tool')}] "
+                    f"{item.get('result')}"
+                )
+            print("Assistant: Task completed.")
+
+        else:
+            print(
+                "\nAssistant:",
+                result.get(
+                    "response",
+                    "Something went wrong."
+                )
+            )
+
 
 # ============================================================
 # MAIN PROGRAM
