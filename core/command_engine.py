@@ -910,9 +910,9 @@ def process_command(user_input):
     memory_result = handle_memory_command(user_input)
 
     if memory_result is not None:
-        speak_response(
-            memory_result.get("result", "")
-        )
+        # speak_response(
+        #     memory_result.get("result", "")
+        # )
         return memory_result
 
     decision = fast_command(user_input)
@@ -942,7 +942,7 @@ def process_command(user_input):
             "I don't have a response."
         )
 
-        speak_response(response)
+        # speak_response(response)
 
         return {
             "success": True,

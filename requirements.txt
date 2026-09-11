@@ -54,6 +54,7 @@ pyttsx3
 # FRONTEND - Professional Desktop GUI
 # ------------------------------------------------------------
 PySide6
+#streamlit
 
 # ------------------------------------------------------------
 # Utility / Configuration
