@@ -4,6 +4,7 @@ import ollama
 import time
 
 from config import OLLAMA_MODEL
+from brain.context import context
 
 
 # ============================================================

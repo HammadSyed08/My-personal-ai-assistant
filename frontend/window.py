@@ -21,7 +21,7 @@ from PySide6.QtWidgets import (
 )
 
 from workers import CommandWorker, VoiceWorker, GreetingWorker, SpeechWorker
-from voice.text_to_speech import text_to_speech
+from speech_controller import speech_controller
 
 
 # ---------------------------------------------------------
@@ -685,76 +685,23 @@ class HAMMUWindow(QWidget):
         return "HAMMU completed the command."
 
     def speak_async(self, text, callback=None):
-      if not text:
-          if callback:
-              callback()
-          return
+        if self.closing or not text:
+            if callback:
+                QTimer.singleShot(0, callback)
+            return
 
-      print(f"🔊 HAMMU SPEAKING: {text}")
+        # print(f"🔊 HAMMU SPEAKING: {text}")
 
-      def speak_and_continue():
-          try:
-              from speech_controller import speech_controller
+        def speak_and_continue():
+            try:
+                speech_controller.speak(text)
+            except Exception as error:
+                print(f"❌ Speech error: {error}")
+            finally:
+                if callback:
+                    QTimer.singleShot(0, callback)
 
-              speech_controller.speak(text)
-
-          finally:
-              if callback:
-                  QTimer.singleShot(0, callback)
-
-      QTimer.singleShot(0, speak_and_continue)
-
-      def speak_and_continue():
-          text_to_speech.speak(text)
-
-          if callback:
-              QTimer.singleShot(0, callback)
-
-      QTimer.singleShot(0, speak_and_continue)
-    # def speak_async(self, text, callback=None):
-
-    #     if self.closing or not text:
-    #         if callback:
-    #             callback()
-    #         return
-
-    #     if self.speech_thread is not None and self.speech_thread.isRunning():
-    #         if callback:
-    #             QTimer.singleShot(0, callback)
-    #         return
-
-    #     self.speech_finished_callback = callback
-
-    #     # Keep the QThread object alive after it finishes.
-    #     # Deleting it here can leave a stale PySide6 wrapper, causing:
-    #     # RuntimeError: Internal C++ object (QThread) already deleted
-    #     self.speech_thread = QThread(self)
-    #     self.speech_worker = SpeechWorker(text)
-    #     self.speech_worker.moveToThread(self.speech_thread)
-
-    #     self.speech_thread.started.connect(self.speech_worker.run)
-    #     self.speech_worker.finished.connect(self.speech_finished)
-    #     self.speech_worker.error.connect(self.speech_error)
-    #     self.speech_worker.finished.connect(self.speech_thread.quit)
-    #     self.speech_worker.error.connect(self.speech_thread.quit)
-    #     self.speech_thread.finished.connect(self.speech_worker.deleteLater)
-
-    #     self.speech_thread.start()
-
-    # @Slot()
-    # def speech_finished(self):
-    #     callback = self.speech_finished_callback
-    #     self.speech_finished_callback = None
-    #     if callback:
-    #         callback()
-
-    # @Slot(str)
-    # def speech_error(self, error):
-    #     print(f"Speech communication warning: {error}")
-    #     callback = self.speech_finished_callback
-    #     self.speech_finished_callback = None
-    #     if callback:
-    #         callback()
+        QTimer.singleShot(0, speak_and_continue)
 
     # -----------------------------------------------------
     # Text command

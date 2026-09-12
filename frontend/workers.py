@@ -22,6 +22,7 @@ from PySide6.QtCore import QObject, Signal, Slot
 
 from core.command_engine import process_command
 from voice.speech_to_text import speech_to_text
+from speech_controller import speech_controller
 
 
 # ---------------------------------------------------------
@@ -74,6 +75,7 @@ class VoiceWorker(QObject):
 # ---------------------------------------------------------
 
 class GreetingWorker(QObject):
+
     finished = Signal()
     error = Signal(str)
 
@@ -83,14 +85,16 @@ class GreetingWorker(QObject):
 
     def run(self):
         try:
-            from speech_controller import speech_controller
-
-            speech_controller.speak(self.message)
+            speech_controller.speak(
+                self.message
+            )
 
             self.finished.emit()
 
         except Exception as error:
-            self.error.emit(str(error))
+            self.error.emit(
+                str(error)
+            )
 
 
 class SpeechWorker(QObject):
@@ -104,7 +108,6 @@ class SpeechWorker(QObject):
     def run(self, text):
         try:
             if text:
-                from speech_controller import speech_controller
                 speech_controller.speak(text)
 
         except Exception as error:
