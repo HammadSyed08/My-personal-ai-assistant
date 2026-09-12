@@ -899,7 +899,7 @@ def handle_memory_command(user_input):
         
     return None
 
-def process_command(user_input):
+def _process_command(user_input):
     """
     Process one HAMMU command.
 
@@ -1033,3 +1033,38 @@ def process_command(user_input):
         "type": "error",
         "response": "I received an unknown command format."
     }
+
+
+# ============================================================
+# CONVERSATION HISTORY
+# ============================================================
+
+def process_command(user_input):
+    """
+    Public command processor.
+
+    Runs the normal HAMMU command engine and then
+    stores the completed interaction in short-term context.
+    """
+
+    result = _process_command(user_input)
+
+    # Save user's message
+    if user_input:
+        context.add_user_message(user_input)
+
+    # Save HAMMU's response
+    if isinstance(result, dict):
+
+        response = (
+            result.get("response")
+            or result.get("result")
+        )
+
+        if response:
+            if isinstance(response, dict):
+                response = str(response)
+
+            context.add_assistant_message(response)
+
+    return result

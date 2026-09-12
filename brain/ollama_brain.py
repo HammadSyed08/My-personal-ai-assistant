@@ -1204,12 +1204,24 @@ def ask_ai(user_message):
     start_time = time.time()
 
     try:
+        conversation_messages = [
+            {"role": "system", "content": SYSTEM_PROMPT}
+        ]
+
+        # Add previous conversation
+        conversation_messages.extend(
+            context.get_conversation_history()
+        )
+
+        # Add the current user message
+        conversation_messages.append({
+            "role": "user",
+            "content": user_message
+        })
+
         response = ollama.chat(
             model=OLLAMA_MODEL,
-            messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user", "content": user_message}
-            ],
+            messages=conversation_messages,
             format="json",
             options={
                 "num_ctx": 2048
