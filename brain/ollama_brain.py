@@ -1191,6 +1191,52 @@ def fast_command(user_message):
 # OLLAMA FALLBACK
 # ============================================================
 
+
+def extract_json(content):
+    """
+    Extract valid JSON from Ollama's response.
+
+    Handles:
+    - Pure JSON
+    - JSON surrounded by normal text
+    - Markdown ```json``` blocks
+    """
+
+    if not content:
+        return None
+
+    content = content.strip()
+
+    # 1. Try pure JSON first
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        pass
+
+    # 2. Remove markdown code fences
+    cleaned = re.sub(
+        r"```(?:json)?\s*(.*?)\s*```",
+        r"\1",
+        content,
+        flags=re.DOTALL | re.IGNORECASE
+    ).strip()
+
+    try:
+        return json.loads(cleaned)
+    except json.JSONDecodeError:
+        pass
+
+    # 3. Find the first JSON object
+    match = re.search(r"\{.*\}", content, re.DOTALL)
+
+    if match:
+        try:
+            return json.loads(match.group(0))
+        except json.JSONDecodeError:
+            pass
+
+    return None
+
 def ask_ai(user_message):
     """
     Send a command directly to Ollama for AI reasoning.
@@ -1222,7 +1268,7 @@ def ask_ai(user_message):
         response = ollama.chat(
             model=OLLAMA_MODEL,
             messages=conversation_messages,
-            format="json",
+            # format="json",
             options={
                 "num_ctx": 2048
             },
@@ -1238,7 +1284,15 @@ def ask_ai(user_message):
         print("\n[AI Decision]")
         print(content)
 
-        decision = json.loads(content)
+        decision = extract_json(content)
+
+        if decision is None:
+            print("[JSON Error] Could not extract valid JSON from AI response.")
+
+            return {
+                "type": "chat",
+                "response": "I couldn't understand the AI response."
+            }
 
         return decision
 

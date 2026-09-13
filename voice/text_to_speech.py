@@ -38,6 +38,8 @@ class TextToSpeech:
         if not text:
             return
 
+        text = text.replace("HAMMU", "Ham moo")
+
         with self._lock:
             engine = None
 
