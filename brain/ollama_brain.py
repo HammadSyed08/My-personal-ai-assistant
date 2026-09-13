@@ -980,6 +980,17 @@ def fast_command(user_message):
 # GOOGLE SEARCH
 # ========================================================
 
+    # Handle incomplete Google search commands
+    if re.match(
+        r"^(?:search|find)\s+(?:on\s+)?google\s+(?:for)?\s*$",
+        text,
+        re.IGNORECASE
+    ):
+        return {
+            "type": "chat",
+            "response": "What would you like me to search for?"
+        }
+
     google_match = re.match(
         r"^(?:search|find)\s+(?:on\s+)?google\s+(?:for\s+)?(.+)$",
         text,

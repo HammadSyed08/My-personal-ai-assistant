@@ -728,10 +728,13 @@ class HAMMUWindow(QWidget):
             "PROCESSING COMMAND..."
         )
 
-        self.start_command_worker_with_ack(
-            text,
-            "Got it. I'm working on that."
-        )
+        if self.should_acknowledge(text):
+            self.start_command_worker_with_ack(
+                text,
+                "Got it. I'm working on that."
+            )
+        else:
+            self.start_command_worker(text)
 
     def closeEvent(self, event):
 
@@ -761,6 +764,53 @@ class HAMMUWindow(QWidget):
     # -----------------------------------------------------
     # Command worker
     # -----------------------------------------------------
+
+    def should_acknowledge(self, command):
+            """
+            Decide whether HAMMU should acknowledge before processing.
+            Simple commands should get an immediate response.
+            Complex commands can get an acknowledgement.
+            """
+
+            if not command:
+                return False
+
+            command = command.lower().strip()
+
+            simple_prefixes = (
+                "hello",
+                "hi",
+                "hey",
+                "what is",
+                "who is",
+                "what are",
+                "how are you",
+                "remember that",
+                "remember my",
+                "what do you remember",
+                "what is my",
+                "calculate",
+                "compute",
+                "open ",
+            )
+
+            if command.startswith(simple_prefixes):
+                return False
+
+            complex_keywords = (
+                "search",
+                "find",
+                "look up",
+                "research",
+                "compare",
+                "explain in detail",
+                "analyze",
+                "write",
+                "create",
+                "plan",
+            )
+
+            return any(keyword in command for keyword in complex_keywords)
 
     def start_command_worker_with_ack(self, command, acknowledgement):
       self.processing = True
@@ -1048,17 +1098,26 @@ class HAMMUWindow(QWidget):
             )
 
             self.voice_response.setText(
-                "Please try again."
+                "Please say it again."
             )
 
             self.set_voice_state(
-                "READY"
+                "RESPONSE"
             )
 
-            self.voice_core_button.setEnabled(True)
-            self.back_chat_button.setEnabled(True)
+            self.voice_hint.setText(
+                "HAMMU IS LISTENING AGAIN..."
+            )
 
             self.processing = False
+
+            self.speak_async(
+                "I didn't understand. Please say it again.",
+                lambda: QTimer.singleShot(
+                    300,
+                    self.start_voice_input
+                )
+            )
 
             return
 
@@ -1077,10 +1136,13 @@ class HAMMUWindow(QWidget):
         self.command_origin = "voice"
 
         # Speak an acknowledgement before the command starts.
-        self.start_command_worker_with_ack(
-            text,
-            "Got it. I'm working on that."
-        )
+        if self.should_acknowledge(text):
+            self.start_command_worker_with_ack(
+                text,
+                "Got it. I'm working on that."
+            )
+        else:
+            self.start_command_worker(text)
 
     def voice_error(self, error):
 

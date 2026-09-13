@@ -657,13 +657,30 @@ def execute_tool(tool_name, args):
 
 def handle_context_command(user_input):
     """
-    Handle commands that refer to previous search results.
+    Handle commands that refer to previous Google search results.
+
+    Examples:
+        open the first result
+        open result 3
+        open 3rd
+        open 1st and 3rd
+        open all
     """
 
     text = user_input.lower().strip()
 
+    if not text:
+        return None
+
     # --------------------------------------------------------
-    # Detect result number
+    # Make sure we actually have previous search results
+    # --------------------------------------------------------
+
+    if not context.last_search_results:
+        return None
+
+    # --------------------------------------------------------
+    # Result number patterns
     # --------------------------------------------------------
 
     result_patterns = {
@@ -699,57 +716,85 @@ def handle_context_command(user_input):
     }
 
     # --------------------------------------------------------
-    # Check whether user is referring to a search result
+    # Check whether this is an "open result" command
     # --------------------------------------------------------
 
-    if not any(
-        phrase in text
-        for phrase in [
-            "result",
-            "search result",
-            "search results"
-        ]
-    ):
+    open_words = (
+        "open",
+        "show",
+        "visit",
+        "go to",
+    )
+
+    if not any(word in text for word in open_words):
         return None
 
     # --------------------------------------------------------
-    # Find requested result number
+    # OPEN ALL RESULTS
     # --------------------------------------------------------
 
-    result_number = None
-
-    for word, number in result_patterns.items():
-
-        if word in text:
-            result_number = number
-            break
-
-    if result_number is None:
-        return None
-
-    # --------------------------------------------------------
-    # Get saved search result
-    # --------------------------------------------------------
-
-    result = context.get_search_result(result_number)
-
-    if result is None:
+    if "all" in text:
         return {
-            "type": "chat",
-            "response": (
-                "I don't have that search result available."
-            )
+            "type": "tool",
+            "tool": "open_search_results",
+            "args": {}
         }
 
     # --------------------------------------------------------
-    # Open result
+    # Find requested result number(s)
+    # --------------------------------------------------------
+
+    result_numbers = []
+
+    for word, number in result_patterns.items():
+        if word in text and number not in result_numbers:
+            result_numbers.append(number)
+
+    # Nothing recognized
+    if not result_numbers:
+        return None
+
+    # --------------------------------------------------------
+    # Validate result numbers
+    # --------------------------------------------------------
+
+    valid_numbers = [
+        number
+        for number in result_numbers
+        if context.get_search_result(number) is not None
+    ]
+
+    if not valid_numbers:
+        return {
+            "type": "chat",
+            "response": "I don't have those search results available."
+        }
+
+    # --------------------------------------------------------
+    # ONE RESULT
+    # --------------------------------------------------------
+
+    if len(valid_numbers) == 1:
+        result_number = valid_numbers[0]
+        result = context.get_search_result(result_number)
+
+        return {
+            "type": "tool",
+            "tool": "open_url",
+            "args": {
+                "url": result["url"]
+            }
+        }
+
+    # --------------------------------------------------------
+    # MULTIPLE RESULTS
     # --------------------------------------------------------
 
     return {
         "type": "tool",
-        "tool": "open_url",
+        "tool": "open_search_results",
         "args": {
-            "url": result["url"]
+            "numbers": valid_numbers
         }
     }
 
@@ -915,10 +960,10 @@ def _process_command(user_input):
         # )
         return memory_result
 
-    decision = fast_command(user_input)
+    decision = handle_context_command(user_input)
 
     if decision is None:
-        decision = handle_context_command(user_input)
+        decision = fast_command(user_input)
 
     if decision is None:
         decision = ask_ai(user_input)
