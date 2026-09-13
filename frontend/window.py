@@ -90,10 +90,10 @@ class HAMMUWindow(QWidget):
         self.setup_connections()
         self.show_welcome_message()
 
-        QTimer.singleShot(
-          350,
-          self.play_startup_sound
-      )
+    #     QTimer.singleShot(
+    #       350,
+    #       self.play_startup_sound
+    #   )
 
     # -----------------------------------------------------
     # Window
@@ -1011,6 +1011,7 @@ class HAMMUWindow(QWidget):
           self.greeting_thread.deleteLater
       )
 
+      self.play_listening_tick()
       self.greeting_thread.start()
 
     def exit_voice_mode(self):
@@ -1048,6 +1049,7 @@ class HAMMUWindow(QWidget):
         self.set_voice_state(
             "LISTENING"
         )
+        self.listening_tick_timer.start(1500)
 
         self.voice_thread = QThread()
         self.voice_worker = VoiceWorker()

@@ -125,12 +125,12 @@ STARTUP_SOUND = create_hammu_sound(
     "hammu_startup.wav",
     [70, 110, 165, 220, 330, 440],
     1.35,
-    0.13
+    0.15
 )
 
 LISTEN_TICK_SOUND = create_hammu_sound(
     "hammu_listen_tick.wav",
     [1050, 1550],
     0.075,
-    0.045
+    0.015
 )
