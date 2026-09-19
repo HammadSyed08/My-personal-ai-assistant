@@ -104,8 +104,8 @@ class SpeechToText:
 
             recording = np.concatenate(audio_chunks, axis=0)
 
-            sf.write("debug_voice.wav", recording, sample_rate)
-            print("💾 Debug recording saved as debug_voice.wav")
+            # sf.write("debug_voice.wav", recording, sample_rate)
+            # print("💾 Debug recording saved as debug_voice.wav")
 
             print("🧠 Understanding...")
 
