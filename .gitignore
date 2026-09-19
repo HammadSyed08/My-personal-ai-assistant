@@ -1,5 +1,5 @@
 hammu-cdp-test
-hammu_chrome 
+hammu_chrome
 backup
 data/memory.db
 
@@ -7,6 +7,8 @@ data/memory.db
 __pycache__/
 *.py[cod]
 *.pyo
+*.pyc
+.kilo
 
 # Virtual environments
 venv/
@@ -24,9 +26,15 @@ data/*.db
 # Logs
 *.log
 
-# Audio files
+# Audio files (ignore generated/temp audio, but keep shipped app assets)
 *.wav
 *.mp3
+!frontend/assets/*.wav
+!frontend/assets/*.mp3
+
+# Stray runtime screenshots
+hammu_screen.png
+hammu_screenshot.png
 
 # IDE
 .vscode/

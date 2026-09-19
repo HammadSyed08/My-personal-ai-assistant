@@ -73,6 +73,36 @@ pip install -r requirements.txt
 python -c "import ollama, playwright, pyautogui, PIL, cv2, numpy, speech_recognition, pyttsx3, PySide6; print('All core packages OK')"
 
 
+## Installation
+
+1. Clone the repo:
+   git clone https://github.com/HammadSyed08/My-personal-ai-assistant.git
+   cd My-personal-ai-assistant
+
+2. Create a virtual environment:
+   python -m venv venv
+   venv\Scripts\activate
+
+3. Install Ollama from https://ollama.com, then pull the required models:
+   ollama pull llama3.1:8b
+   ollama pull moondream
+
+4. Install Python dependencies:
+   pip install -r requirements.txt
+
+5. Install Playwright's browser binary:
+   python -m playwright install chromium
+
+6. Verify the core packages installed correctly:
+   python -c "import ollama, playwright, pyautogui, PIL, cv2, numpy, speech_recognition, pyttsx3, PySide6; print('All core packages OK')"
+
+7. Edit config.py — set CURRENT_WORKING_DIR to a real folder on your machine.
+   Edit security/permissions.py — set ALLOWED_DRIVES to match your drives.
+
+8. Run it:
+   python main.py
+
+
 | Component           | Purpose                                 |
 | ------------------- | --------------------------------------- |
 | `ollama`            | Local AI brain                          |
@@ -272,5 +302,18 @@ Every file/folder action is checked against `ALLOWED_DRIVES` / `PROTECTED_DRIVES
 | Browser commands do nothing | Chrome missing, or Playwright binaries not installed | Install Chrome; `python -m playwright install chromium` |
 | Voice mode doesn't hear anything | No mic permission, or no internet (speech recognition is cloud-based) | Grant mic access; check connection |
 | GUI won't start | `PySide6` missing, or run from wrong folder | `pip install PySide6`; run `python app.py` from inside `frontend/` |
+
+## Before you push to GitHub
+
+- **Use the provided `.gitignore`.** It excludes `__pycache__/`, your virtual environment, `.env` secrets, your personal memory database (`data/memory.db`), and stray runtime files — while explicitly keeping the `.wav` sound assets under `frontend/assets/` that the GUI needs to run.
+- **Double-check `config.py` and `security/permissions.py`** don't contain anything specific to your machine that you don't want public (e.g. real drive letters, personal folder names).
+- **Private repo?** A link alone doesn't grant access — you need to add each person as a **Collaborator** (repo → Settings → Collaborators) or make the repo public.
+- **Public repo?** Anyone can clone and view the code, but they **cannot push changes** to your repository. Cloning only grants read access. To contribute, someone would need to fork the repo and open a Pull Request, which you'd have to review and merge yourself — or you'd need to explicitly grant them write access as a collaborator.
+
+## Steps for someone cloning this repo
+
+1. Get access (added as a collaborator if private, or the repo is public).
+2. `git clone https://github.com/hammadsyed08/my-assistant.git`
+3. Follow the **Setup** section above — installing Python, Ollama, dependencies, and editing `config.py` / `security/permissions.py` for their own machine (your `E:\` paths won't exist on theirs).
 
 For the full architecture explanation, a component-by-component walkthrough, and how to add new tools, see **`Hammu_AI_Assistant_Documentation.docx`**.
