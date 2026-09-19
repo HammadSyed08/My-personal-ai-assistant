@@ -75,6 +75,19 @@ copy_item:
 move_item:
 {"source":"Projects/hello.txt","destination":"Documents"}
 
+FILE COPY/MOVE RULES:
+- "copy X and paste in Y" means ONE copy_item operation:
+  {"source":"X","destination":"Y"}
+- Do NOT create a paste_item tool.
+- The destination field of copy_item is already the folder where the copied item should be placed.
+- "cut X and paste in Y" means ONE move_item operation:
+  {"source":"X","destination":"Y"}
+- Do NOT create separate move_item and copy_item steps for a cut request.
+- Do NOT create separate cut_item and paste_item steps for a cut request.
+- Never invent intermediate folders such as Projects or Backup unless the user explicitly names them.
+- Use the exact source filename/path provided by the user.
+- Use the exact destination folder provided by the user.
+
 delete_file:
 {"path":"Projects/hello.txt"}
 
@@ -252,6 +265,55 @@ def fast_command(user_message):
 
     text = user_message.strip()
     lower = text.lower()
+
+    # ============================================================
+    # FAST FILE COPY / MOVE COMMANDS
+    # ============================================================
+
+    # "copy X and paste in Y"
+    # "copy X to Y"
+    # "copy X into Y"
+    copy_match = re.match(
+        r"^(?:copy)\s+(.+?)\s+(?:and\s+paste\s+(?:in|into|to)|to|into)\s+(.+)$",
+        text,
+        re.IGNORECASE
+    )
+
+    if copy_match:
+        source = copy_match.group(1).strip()
+        destination = copy_match.group(2).strip()
+
+        return {
+            "type": "tool",
+            "tool": "copy_item",
+            "args": {
+                "source": source,
+                "destination": destination
+            }
+        }
+
+    # "cut X and paste in Y"
+    # "cut X to Y"
+    # "move X to Y"
+    # "move X into Y"
+    move_match = re.match(
+        r"^(?:(?:cut)|(?:move))\s+(.+?)\s+(?:and\s+paste\s+(?:in|into|to)|to|into)\s+(.+)$",
+        text,
+        re.IGNORECASE
+    )
+
+    if move_match:
+        source = move_match.group(1).strip()
+        destination = move_match.group(2).strip()
+
+        return {
+            "type": "tool",
+            "tool": "move_item",
+            "args": {
+                "source": source,
+                "destination": destination
+            }
+        }
 
     # Browser tab controls
     if re.search(r"\b(close|close the)\s+(new\s+)?tab\b", lower):
