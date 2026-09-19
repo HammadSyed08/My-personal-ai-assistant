@@ -89,7 +89,11 @@ def main():
         if user_input.lower() in [
             "exit",
             "quit",
-            "stop"
+            "stop",
+            "close hammu",
+            "exit hammu",
+            "quit hammu",
+            "stop hammu",
         ]:
 
             print("Assistant: Goodbye!")

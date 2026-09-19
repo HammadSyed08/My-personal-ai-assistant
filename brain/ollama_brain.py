@@ -2,6 +2,7 @@ import json
 import re
 import ollama
 import time
+import os
 
 from config import OLLAMA_MODEL
 from brain.context import context
@@ -181,6 +182,7 @@ Rules:
 13. For multiple actions, return a plan.
 """
 
+
 def fast_chat(user_message):
     text = user_message.lower().strip()
 
@@ -194,6 +196,7 @@ def fast_chat(user_message):
     }
 
     return greetings.get(text)
+
 
 # ============================================================
 # Math Expression Parser
@@ -251,16 +254,16 @@ def fast_command(user_message):
     lower = text.lower()
 
     # Browser tab controls
-    if re.search(r"\b(close|close the)\s+(new\s+)?tab\b", text):
+    if re.search(r"\b(close|close the)\s+(new\s+)?tab\b", lower):
         return {
             "type": "tool",
             "tool": "browser_close_tab",
             "args": {}
         }
 
-# ============================================================
-# FAST LOCAL CALCULATOR
-# ============================================================
+    # ============================================================
+    # FAST LOCAL CALCULATOR
+    # ============================================================
 
     # add 4 and 7
     match = re.match(
@@ -281,7 +284,6 @@ def fast_command(user_message):
             }
         }
 
-
     # subtract 3 from 10
     match = re.match(
         r"^subtract\s+(-?\d+(?:\.\d+)?)\s+from\s+(-?\d+(?:\.\d+)?)$",
@@ -300,7 +302,6 @@ def fast_command(user_message):
                 ]
             }
         }
-
 
     # subtract 10 and 3
     match = re.match(
@@ -321,7 +322,6 @@ def fast_command(user_message):
             }
         }
 
-
     # multiply 4 by 5
     match = re.match(
         r"^(?:multiply|times)\s+(-?\d+(?:\.\d+)?)\s+(?:by|and)\s+(-?\d+(?:\.\d+)?)$",
@@ -340,7 +340,6 @@ def fast_command(user_message):
                 ]
             }
         }
-
 
     # divide 20 by 4
     match = re.match(
@@ -369,7 +368,7 @@ def fast_command(user_message):
 
     if math_result is not None:
         return math_result
-    
+
     local_response = fast_chat(text)
 
     if local_response is not None:
@@ -383,16 +382,41 @@ def fast_command(user_message):
     # --------------------------------------------------------
 
     if re.search(r"\b(take|capture|get)\b.*\b(screenshot|screen shot)\b", lower):
+
+        save_match = re.search(
+            r"\b(?:save|store)\s+(?:it\s+)?(?:in|to)\s+(.+)$",
+            text,
+            re.IGNORECASE
+        )
+
+        if save_match:
+            destination = save_match.group(1).strip()
+
+            return {
+                "type": "tool",
+                "tool": "take_screenshot",
+                "args": {
+                    "path": destination
+                }
+            }
+
+        base_path = r"E:\hammu_screenshot"
+        counter = 1
+
+        while os.path.exists(f"{base_path}_{counter:03d}.png"):
+            counter += 1
+
         return {
             "type": "tool",
             "tool": "take_screenshot",
             "args": {
-                "path": r"E:\hammu_screenshot.png"
+                "path": f"{base_path}_{counter:03d}.png"
             }
         }
-# --------------------------------------------------------
-# ACTIVE WINDOW / APPLICATION
-# --------------------------------------------------------
+
+    # --------------------------------------------------------
+    # ACTIVE WINDOW / APPLICATION
+    # --------------------------------------------------------
 
     active_window_patterns = [
         r"\bwhich app is open\b",
@@ -451,8 +475,9 @@ def fast_command(user_message):
         }
 
     # --------------------------------------------------------
-# SCREEN ANALYSIS / VISION
-# --------------------------------------------------------
+    # SCREEN ANALYSIS / VISION
+    # --------------------------------------------------------
+
     screen_analysis_patterns = [
         r"\bwhat('?s| is) on my screen\b",
         r"\bwhat('?s| is) on the screen\b",
@@ -498,20 +523,20 @@ def fast_command(user_message):
             }
         }
 
-        # --------------------------------------------------------
-        # SCREEN SIZE
-        # --------------------------------------------------------
+    # --------------------------------------------------------
+    # SCREEN SIZE
+    # --------------------------------------------------------
 
-        if "screen size" in lower or "resolution" in lower:
-            return {
-                "type": "tool",
-                "tool": "get_screen_size",
-                "args": {}
-            }
+    if "screen size" in lower or "resolution" in lower:
+        return {
+            "type": "tool",
+            "tool": "get_screen_size",
+            "args": {}
+        }
 
-# -------------------------------------------------
-# LIST BROWSER TABS
-# -------------------------------------------------
+    # -------------------------------------------------
+    # LIST BROWSER TABS
+    # -------------------------------------------------
 
     if lower in [
         "list tabs",
@@ -527,9 +552,9 @@ def fast_command(user_message):
             "args": {}
         }
 
-# -------------------------------------------------
-# NEXT BROWSER TAB
-# -------------------------------------------------
+    # -------------------------------------------------
+    # NEXT BROWSER TAB
+    # -------------------------------------------------
 
     if lower in [
         "next tab",
@@ -543,9 +568,9 @@ def fast_command(user_message):
             "args": {}
         }
 
-# -------------------------------------------------
-# PREVIOUS BROWSER TAB
-# -------------------------------------------------
+    # -------------------------------------------------
+    # PREVIOUS BROWSER TAB
+    # -------------------------------------------------
 
     if lower in [
         "previous tab",
@@ -560,9 +585,9 @@ def fast_command(user_message):
             "args": {}
         }
 
-# -------------------------------------------------
-# CLOSE CURRENT TAB
-# -------------------------------------------------
+    # -------------------------------------------------
+    # CLOSE CURRENT TAB
+    # -------------------------------------------------
 
     if lower in [
         "close tab",
@@ -576,11 +601,11 @@ def fast_command(user_message):
             "args": {}
         }
 
-# --------------------------------------------------------
-# CHROME PROFILE COMMANDS
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # CHROME PROFILE COMMANDS
+    # --------------------------------------------------------
 
-# OPEN NEW TAB IN SPECIFIC CHROME PROFILE
+    # OPEN NEW TAB IN SPECIFIC CHROME PROFILE
     profile_tab_match = re.match(
         r"^(open|create)\s+(?:a\s+)?new\s+tab\s+(?:in|on)\s+(.+?)\s+profile$",
         lower
@@ -597,7 +622,6 @@ def fast_command(user_message):
                 "open_new_tab": True
             }
         }
-
 
     # OPEN WEBSITE IN SPECIFIC CHROME PROFILE
     profile_website_match = re.match(
@@ -618,7 +642,6 @@ def fast_command(user_message):
             }
         }
 
-
     # CURRENT CHROME PROFILE
     if lower in [
         "current profile",
@@ -635,9 +658,9 @@ def fast_command(user_message):
             "args": {}
         }
 
-# --------------------------------------------------------
-# OPEN CHROME PROFILE
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # OPEN CHROME PROFILE
+    # --------------------------------------------------------
 
     chrome_profile_patterns = [
         r"^open\s+(.+?)\s+profile$",
@@ -649,7 +672,6 @@ def fast_command(user_message):
     ]
 
     for pattern in chrome_profile_patterns:
-
         profile_match = re.match(
             pattern,
             text.strip(),
@@ -657,7 +679,6 @@ def fast_command(user_message):
         )
 
         if profile_match:
-
             profile_name = profile_match.group(1).strip()
 
             return {
@@ -668,9 +689,9 @@ def fast_command(user_message):
                 }
             }
 
-# ========================================================
-# OPEN WEBSITE
-# ========================================================
+    # ========================================================
+    # OPEN WEBSITE
+    # ========================================================
 
     website_match = re.match(
         r"^(open|launch|start|go to)\s+(?:the\s+)?(.+?)\s*(?:website|site)?$",
@@ -702,9 +723,9 @@ def fast_command(user_message):
                 }
             }
 
-# --------------------------------------------------------
-# NEW BROWSER TAB
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # NEW BROWSER TAB
+    # --------------------------------------------------------
 
     new_tab_patterns = [
         r"^open\s+(a\s+)?new\s+tab$",
@@ -720,9 +741,9 @@ def fast_command(user_message):
             "args": {}
         }
 
-# --------------------------------------------------------
-# OPEN NEW BROWSER TAB
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # OPEN NEW BROWSER TAB
+    # --------------------------------------------------------
 
     new_tab_match = re.match(
         r"^(open|create)\s+(a\s+)?new\s+(browser\s+)?tab(?:\s+(.+))?$",
@@ -744,193 +765,188 @@ def fast_command(user_message):
     # OPEN APPLICATION
     # --------------------------------------------------------
 
-        open_match = re.match(
-            r"^(open|launch|start|run)\s+(.+)$",
-            lower
+    open_match = re.match(
+        r"^(open|launch|start|run)\s+(.+)$",
+        lower
+    )
+
+    if open_match:
+        target = open_match.group(2).strip()
+
+        # Remove common polite words
+        target = re.sub(
+            r"^(the|my)\s+",
+            "",
+            target
         )
 
-        if open_match:
+        applications = {
+            "chrome": "chrome",
+            "google chrome": "chrome",
+            "notepad": "notepad",
+            "calculator": "calculator",
+            "calc": "calculator",
+        }
 
-            target = open_match.group(2).strip()
-
-            # Remove common polite words
-            target = re.sub(
-                r"^(the|my)\s+",
-                "",
-                target
-            )
-
-            applications = {
-                "chrome": "chrome",
-                "google chrome": "chrome",
-                "notepad": "notepad",
-                "calculator": "calculator",
-                "calc": "calculator",
-            }
-
-            if target in applications:
-                return {
-                    "type": "tool",
-                    "tool": "open_application",
-                    "args": {
-                        "name": applications[target]
-                    }
-                }
-
-        # --------------------------------------------------------
-        # CLOSE APPLICATION
-        # --------------------------------------------------------
-
-        close_match = re.match(
-            r"^(close|exit|quit|terminate|shut)\s+(.+)$",
-            lower
-        )
-
-        if close_match:
-
-            target = close_match.group(2).strip()
-
-            target = re.sub(
-                r"^(the|my)\s+",
-                "",
-                target
-            )
-
-            applications = {
-                "chrome": "chrome",
-                "google chrome": "chrome",
-                "notepad": "notepad",
-                "calculator": "calculator",
-                "calc": "calculator",
-            }
-
-            if target in applications:
-                return {
-                    "type": "tool",
-                    "tool": "close_application",
-                    "args": {
-                        "name": applications[target]
-                    }
-                }
-
-        # --------------------------------------------------------
-        # PRESS KEY
-        # --------------------------------------------------------
-
-        key_match = re.match(
-            r"^press\s+(.+)$",
-            lower
-        )
-
-        if key_match:
-
-            key = key_match.group(1).strip()
-
-            key_map = {
-                "enter": "enter",
-                "return": "enter",
-                "tab": "tab",
-                "escape": "esc",
-                "esc": "esc",
-                "backspace": "backspace",
-                "delete": "delete",
-                "space": "space",
-                "home": "home",
-                "end": "end",
-                "up": "up",
-                "down": "down",
-                "left": "left",
-                "right": "right",
-                "f5": "f5",
-            }
-
-            if key in key_map:
-                return {
-                    "type": "tool",
-                    "tool": "press_key",
-                    "args": {
-                        "key": key_map[key]
-                    }
-                }
-
-        # --------------------------------------------------------
-        # TYPE / WRITE
-        # --------------------------------------------------------
-
-        type_match = re.match(
-            r"^(type|write)\s+(.+)$",
-            text,
-            re.IGNORECASE
-        )
-
-        if type_match:
-
-            typed_text = type_match.group(2).strip()
-
+        if target in applications:
             return {
                 "type": "tool",
-                "tool": "type_text",
+                "tool": "open_application",
                 "args": {
-                    "text": typed_text
+                    "name": applications[target]
                 }
             }
 
-        # --------------------------------------------------------
-        # OPEN SPECIAL WINDOWS FOLDERS
-        # --------------------------------------------------------
+    # --------------------------------------------------------
+    # CLOSE APPLICATION
+    # --------------------------------------------------------
 
-        folder_match = re.match(
-            r"^(open|show)\s+(my\s+)?(downloads|documents|desktop|pictures|videos|music)(\s+folder)?$",
-            lower
+    close_match = re.match(
+        r"^(close|exit|quit|terminate|shut)\s+(.+)$",
+        lower
+    )
+
+    if close_match:
+        target = close_match.group(2).strip()
+
+        target = re.sub(
+            r"^(the|my)\s+",
+            "",
+            target
         )
 
-        if folder_match:
+        applications = {
+            "chrome": "chrome",
+            "google chrome": "chrome",
+            "notepad": "notepad",
+            "calculator": "calculator",
+            "calc": "calculator",
+        }
 
-            folder = folder_match.group(3)
-
+        if target in applications:
             return {
                 "type": "tool",
-                "tool": "open_folder",
+                "tool": "close_application",
                 "args": {
-                    "path": folder.capitalize()
+                    "name": applications[target]
                 }
             }
 
-        # --------------------------------------------------------
-        # LIST DIRECTORY
-        # --------------------------------------------------------
+    # --------------------------------------------------------
+    # PRESS KEY
+    # --------------------------------------------------------
 
-        inside_match = re.match(
-            r"^(what('s| is) inside|what('s| is) in|list|show)\s+(the\s+)?(.+?)(\s+folder)?$",
-            lower
-        )
+    key_match = re.match(
+        r"^press\s+(.+)$",
+        lower
+    )
 
-        if inside_match:
+    if key_match:
+        key = key_match.group(1).strip()
 
-            folder = inside_match.group(5).strip()
+        key_map = {
+            "enter": "enter",
+            "return": "enter",
+            "tab": "tab",
+            "escape": "esc",
+            "esc": "esc",
+            "backspace": "backspace",
+            "delete": "delete",
+            "space": "space",
+            "home": "home",
+            "end": "end",
+            "up": "up",
+            "down": "down",
+            "left": "left",
+            "right": "right",
+            "f5": "f5",
+        }
 
-            if folder:
-                return {
-                    "type": "tool",
-                    "tool": "list_directory",
-                    "args": {
-                        "path": folder
-                    }
+        if key in key_map:
+            return {
+                "type": "tool",
+                "tool": "press_key",
+                "args": {
+                    "key": key_map[key]
                 }
+            }
 
-        # --------------------------------------------------------
-        # CREATE FOLDER
-        # --------------------------------------------------------
+    # --------------------------------------------------------
+    # TYPE / WRITE
+    # --------------------------------------------------------
 
-        create_match = re.match(
-            r"^create\s+(a\s+)?folder\s+(called|named)\s+(.+)$",
-            lower
-        )
+    type_match = re.match(
+        r"^(type|write)\s+(.+)$",
+        text,
+        re.IGNORECASE
+    )
 
-        if create_match:
+    if type_match:
+        typed_text = type_match.group(2).strip()
 
-            folder_name = create_match.group(3).strip()
+        return {
+            "type": "tool",
+            "tool": "type_text",
+            "args": {
+                "text": typed_text
+            }
+        }
 
+    # --------------------------------------------------------
+    # OPEN SPECIAL WINDOWS FOLDERS
+    # --------------------------------------------------------
+
+    folder_match = re.match(
+        r"^(open|show)\s+(my\s+)?(downloads|documents|desktop|pictures|videos|music)(\s+folder)?$",
+        lower
+    )
+
+    if folder_match:
+        folder = folder_match.group(3)
+
+        return {
+            "type": "tool",
+            "tool": "open_folder",
+            "args": {
+                "path": folder.capitalize()
+            }
+        }
+
+    # --------------------------------------------------------
+    # LIST DIRECTORY
+    # --------------------------------------------------------
+
+    inside_match = re.match(
+        r"^(what('s| is) inside|what('s| is) in|list|show)\s+(the\s+)?(.+?)(\s+folder)?$",
+        lower
+    )
+
+    if inside_match:
+        folder = inside_match.group(4).strip()
+
+        if folder:
+            return {
+                "type": "tool",
+                "tool": "list_directory",
+                "args": {
+                    "path": folder
+                }
+            }
+
+    # --------------------------------------------------------
+    # CREATE FOLDER
+    # --------------------------------------------------------
+
+    create_match = re.match(
+        r"^create\s+(a\s+)?folder\s+(?:(called|named|with\s+name)\s+)?(.+)$",
+        text,
+        re.IGNORECASE
+    )
+
+    if create_match:
+        folder_name = create_match.group(3).strip()
+
+        if folder_name:
             return {
                 "type": "tool",
                 "tool": "create_folder",
@@ -938,12 +954,12 @@ def fast_command(user_message):
                     "path": folder_name
                 }
             }
-
-        return None
     # Locate & Click regex pattern
     click_match = re.match(r"^(click|press|select)\s+(on\s+)?(the\s+)?(.+?)$", lower)
+
     if click_match and not any(k in lower for k in ["button", "key", "mouse"]):
         target_item = click_match.group(4).strip()
+
         return {
             "type": "tool",
             "tool": "locate_and_click",
@@ -952,10 +968,9 @@ def fast_command(user_message):
             }
         }
 
-
-# ========================================================
-# YOUTUBE SEARCH
-# ========================================================
+    # ========================================================
+    # YOUTUBE SEARCH
+    # ========================================================
 
     youtube_match = re.match(
         r"^(?:search|find)\s+(?:on\s+)?youtube\s+(?:for\s+)?(.+)$",
@@ -975,10 +990,9 @@ def fast_command(user_message):
                 }
             }
 
-
-# ========================================================
-# GOOGLE SEARCH
-# ========================================================
+    # ========================================================
+    # GOOGLE SEARCH
+    # ========================================================
 
     # Handle incomplete Google search commands
     if re.match(
@@ -1009,79 +1023,79 @@ def fast_command(user_message):
                 }
             }
 
-# --------------------------------------------------------
-# BROWSER NEW TAB
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # BROWSER NEW TAB
+    # --------------------------------------------------------
 
-        if re.search(
-            r"^\s*(open|create|new)\s+(a\s+)?new\s+tab\s*$",
-            lower
-        ):
-            return {
-                "type": "tool",
-                "tool": "browser_new_tab",
-                "args": {}
-            }
+    if re.search(
+        r"^\s*(open|create|new)\s+(a\s+)?new\s+tab\s*$",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "browser_new_tab",
+            "args": {}
+        }
 
-# --------------------------------------------------------
-# BROWSER CLOSE TAB
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # BROWSER CLOSE TAB
+    # --------------------------------------------------------
 
-        if re.search(
-            r"^\s*(close|exit)\s+(this\s+)?tab\s*$",
-            lower
-        ):
-            return {
-                "type": "tool",
-                "tool": "browser_close_tab",
-                "args": {}
-            }
+    if re.search(
+        r"^\s*(close|exit)\s+(this\s+)?tab\s*$",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "browser_close_tab",
+            "args": {}
+        }
 
-# --------------------------------------------------------
-# BROWSER NEXT TAB
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # BROWSER NEXT TAB
+    # --------------------------------------------------------
 
-        if re.search(
-            r"^\s*(next|switch to next)\s+tab\s*$",
-            lower
-        ):
-            return {
-                "type": "tool",
-                "tool": "browser_next_tab",
-                "args": {}
-            }
+    if re.search(
+        r"^\s*(next|switch to next)\s+tab\s*$",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "browser_next_tab",
+            "args": {}
+        }
 
-# --------------------------------------------------------
-# BROWSER PREVIOUS TAB
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # BROWSER PREVIOUS TAB
+    # --------------------------------------------------------
 
-        if re.search(
-            r"^\s*(previous|last|switch to previous)\s+tab\s*$",
-            lower
-        ):
-            return {
-                "type": "tool",
-                "tool": "browser_previous_tab",
-                "args": {}
-            }
+    if re.search(
+        r"^\s*(previous|last|switch to previous)\s+tab\s*$",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "browser_previous_tab",
+            "args": {}
+        }
 
-# --------------------------------------------------------
-# BROWSER LIST TABS
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # BROWSER LIST TABS
+    # --------------------------------------------------------
 
-        if re.search(
-            r"^\s*(list|show)\s+(all\s+)?tabs\s*$",
-            lower
-        ):
-            return {
-                "type": "tool",
-                "tool": "browser_list_tabs",
-                "args": {}
-            }
-    
-# --------------------------------------------------------
-# BROWSER BACK
-# --------------------------------------------------------
+    if re.search(
+        r"^\s*(list|show)\s+(all\s+)?tabs\s*$",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "browser_list_tabs",
+            "args": {}
+        }
+
+    # --------------------------------------------------------
+    # BROWSER BACK
+    # --------------------------------------------------------
 
     if re.search(
         r"^(go back|back|browser back)$",
@@ -1093,9 +1107,9 @@ def fast_command(user_message):
             "args": {}
         }
 
-# --------------------------------------------------------
-# BROWSER FORWARD
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # BROWSER FORWARD
+    # --------------------------------------------------------
 
     if re.search(
         r"^(go forward|forward|browser forward)$",
@@ -1107,9 +1121,9 @@ def fast_command(user_message):
             "args": {}
         }
 
-# --------------------------------------------------------
-# BROWSER REFRESH
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # BROWSER REFRESH
+    # --------------------------------------------------------
 
     if re.search(
         r"^(refresh|refresh page|reload|reload page)$",
@@ -1121,9 +1135,9 @@ def fast_command(user_message):
             "args": {}
         }
 
-# --------------------------------------------------------
-# BROWSER PAGE TITLE
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # BROWSER PAGE TITLE
+    # --------------------------------------------------------
 
     if re.search(
         r"^(what page is open|which page is open|what page is this|what website is open|which website is open|what site is open|which site is open)$",
@@ -1135,10 +1149,9 @@ def fast_command(user_message):
             "args": {}
         }
 
-
-# --------------------------------------------------------
-# CURRENT URL
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # CURRENT URL
+    # --------------------------------------------------------
 
     if re.search(
         r"^(what is the current url|what's the current url|show current url|what url is open|which url is open)$",
@@ -1150,10 +1163,9 @@ def fast_command(user_message):
             "args": {}
         }
 
-
-# --------------------------------------------------------
-# CLOSE BROWSER
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # CLOSE BROWSER
+    # --------------------------------------------------------
 
     if re.search(
         r"^(close browser|exit browser|quit browser)$",
@@ -1165,9 +1177,9 @@ def fast_command(user_message):
             "args": {}
         }
 
-# --------------------------------------------------------
-# FIND BROWSER ELEMENT
-# --------------------------------------------------------
+    # --------------------------------------------------------
+    # FIND BROWSER ELEMENT
+    # --------------------------------------------------------
 
     find_element_patterns = [
         r"^find\s+(?:the\s+)?(.+)$",
@@ -1176,7 +1188,6 @@ def fast_command(user_message):
     ]
 
     for pattern in find_element_patterns:
-
         match = re.match(
             pattern,
             text,
@@ -1184,7 +1195,6 @@ def fast_command(user_message):
         )
 
         if match:
-
             target = match.group(1).strip()
 
             return {
@@ -1201,7 +1211,6 @@ def fast_command(user_message):
 # ============================================================
 # OLLAMA FALLBACK
 # ============================================================
-
 
 def extract_json(content):
     """
@@ -1247,6 +1256,7 @@ def extract_json(content):
             pass
 
     return None
+
 
 def ask_ai(user_message):
     """

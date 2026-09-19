@@ -566,9 +566,29 @@ def execute_tool(tool_name, args):
     elif tool_name == "take_screenshot":
 
         path = args.get(
-        "path",
-        "E:\\hammu_screenshot.png"
-    )
+            "path",
+            "E:\\hammu_screenshot.png"
+        )
+
+        resolved_path = resolve_path(path)
+
+        if resolved_path.exists() and resolved_path.is_dir():
+
+            counter = 1
+
+            while True:
+
+                screenshot_path = (
+                    resolved_path /
+                    f"hammu_screenshot_{counter:03d}.png"
+                )
+
+                if not screenshot_path.exists():
+                    break
+
+                counter += 1
+
+            path = str(screenshot_path)
 
         return take_screenshot(path)
     
