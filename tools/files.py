@@ -206,6 +206,66 @@ def open_folder(path_text):
 
 
 # ============================================================
+# CLOSE FOLDER
+# ============================================================
+
+def close_folder(path_text):
+
+    path = resolve_path(path_text)
+
+    try:
+
+        if not path.exists():
+            return f"I couldn't find this folder: {path}"
+
+        if not path.is_dir():
+            return f"This path is not a folder: {path}"
+
+        import win32gui
+        import win32com.client
+
+        shell = win32com.client.Dispatch("Shell.Application")
+
+        target_path = str(path.resolve()).lower().rstrip("\\")
+
+        for window in shell.Windows():
+
+            try:
+
+                current_path = window.Document.Folder.Self.Path
+
+                if not current_path:
+                    continue
+
+                current_path = (
+                    str(current_path)
+                    .lower()
+                    .rstrip("\\")
+                )
+
+                if current_path == target_path:
+
+                    hwnd = window.HWND
+
+                    win32gui.PostMessage(
+                        hwnd,
+                        0x0010,  # WM_CLOSE
+                        0,
+                        0
+                    )
+
+                    return f"Closed folder: {path}"
+
+            except Exception:
+                continue
+
+        return f"I couldn't find an open Explorer window for: {path}"
+
+    except Exception as error:
+
+        return f"Could not close folder: {error}"
+
+# ============================================================
 # LIST DIRECTORY
 # ============================================================
 

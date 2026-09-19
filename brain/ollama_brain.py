@@ -954,6 +954,31 @@ def fast_command(user_message):
             }
         }
 
+    
+    # --------------------------------------------------------
+    # CLOSE FOLDER
+    # --------------------------------------------------------
+
+    # close Assignment folder
+    # close the Assignment folder
+    close_folder_match = re.match(
+        r"^close\s+(?:the\s+)?(.+?)\s+folder$",
+        text,
+        re.IGNORECASE
+    )
+
+    if close_folder_match:
+        folder = close_folder_match.group(1).strip()
+
+        if folder:
+            return {
+                "type": "tool",
+                "tool": "close_folder",
+                "args": {
+                    "path": folder
+                }
+            }
+
     # --------------------------------------------------------
     # OPEN SPECIAL WINDOWS FOLDERS
     # --------------------------------------------------------
@@ -999,14 +1024,36 @@ def fast_command(user_message):
     # CREATE FOLDER
     # --------------------------------------------------------
 
+    # create folder
+    # create a folder
+    # make a folder
+    if re.fullmatch(
+        r"(?:create|make)\s+(?:a\s+)?folder",
+        lower
+    ):
+        return {
+            "type": "tool",
+            "tool": "create_folder",
+            "args": {
+                "path": "New Folder"
+            }
+        }
+
+    # create folder called New_projects
+    # create folder named New_projects
+    # create folder with name New_projects
+    # create a folder called New_projects
+    # make a folder named New_projects
     create_match = re.match(
-        r"^create\s+(a\s+)?folder\s+(?:(called|named|with\s+name)\s+)?(.+)$",
+        r"^(?:create|make)\s+(?:a\s+)?folder\s+"
+        r"(?:(?:called|named|with\s+name)\s+)?"
+        r"(.+)$",
         text,
         re.IGNORECASE
     )
 
     if create_match:
-        folder_name = create_match.group(3).strip()
+        folder_name = create_match.group(1).strip()
 
         if folder_name:
             return {
@@ -1016,17 +1063,52 @@ def fast_command(user_message):
                     "path": folder_name
                 }
             }
-    # Locate & Click regex pattern
-    click_match = re.match(r"^(click|press|select)\s+(on\s+)?(the\s+)?(.+?)$", lower)
 
-    if click_match and not any(k in lower for k in ["button", "key", "mouse"]):
-        target_item = click_match.group(4).strip()
+    # create New_projects folder
+    # make New_projects folder
+    create_name_match = re.match(
+        r"^(?:create|make)\s+(.+?)\s+folder$",
+        text,
+        re.IGNORECASE
+    )
+
+    if create_name_match:
+        folder_name = create_name_match.group(1).strip()
+
+        if folder_name:
+            return {
+                "type": "tool",
+                "tool": "create_folder",
+                "args": {
+                    "path": folder_name
+                }
+            }
+
+    # ============================================================
+# NATURAL FILE MOVE COMMANDS
+# ============================================================
+
+    # "put X in Y"
+    # "put X into Y"
+    # "place X in Y"
+    # "place X into Y"
+
+    put_move_match = re.match(
+        r"^(?:put|place)\s+(.+?)\s+(?:in|into)\s+(.+)$",
+        text,
+        re.IGNORECASE
+    )
+
+    if put_move_match:
+        source = put_move_match.group(1).strip()
+        destination = put_move_match.group(2).strip()
 
         return {
             "type": "tool",
-            "tool": "locate_and_click",
+            "tool": "move_item",
             "args": {
-                "target": target_item
+                "source": source,
+                "destination": destination
             }
         }
 

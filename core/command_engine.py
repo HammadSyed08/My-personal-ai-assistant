@@ -48,6 +48,7 @@ from tools.files import (
     list_directory,
     move_item,
     open_folder,
+    close_folder,
     read_file,
     rename_item,
     resolve_path,
@@ -214,6 +215,13 @@ def execute_tool(tool_name, args):
             return "Folder path was not provided."
 
         return open_folder(path)
+    
+    elif tool_name == "close_folder":
+        path = args.get("path", "").strip()
+        if not path:
+            return "Folder path was not provided."
+
+        return close_folder(path)
 
     elif tool_name == "list_directory":
         path = args.get("path", "").strip()
