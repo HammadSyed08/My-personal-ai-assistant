@@ -183,7 +183,7 @@ Rules:
 1. Use tools for computer actions.
 2. Never invent tools.
 3. Never invent arguments.
-4. "close" means close_application.
+4. Use close_application only when the user explicitly asks to close an application by name.
 5. "open", "launch", "start" means open_application.
 6. "write" or "type" means type_text when the user wants keyboard input.
 7. "what is inside", "what's inside", "list", or "show files" means list_directory.

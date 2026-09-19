@@ -657,6 +657,17 @@ class HAMMUWindow(QWidget):
                 count = value.get("count", 0)
                 query = value.get("query", "")
                 return f"I found {count} result(s) for {query}."
+        if tool == "close_application":
+            if isinstance(value, dict):
+                if value.get("success"):
+                    name = value.get("name") or "application"
+                    return f"{name} is closed."
+
+                if value.get("error"):
+                    return str(value["error"])
+
+            if isinstance(value, str):
+                return value
 
         if result.get("type") == "plan":
             results = result.get("results", [])
@@ -870,6 +881,15 @@ class HAMMUWindow(QWidget):
 
     def command_finished(self, result):
       response = self.normalize_result(result)
+
+      if response.strip().lower() in (
+            "goodbye",
+            "goodbye!",
+            "bye",
+            "bye!",
+        ):
+            self.close()
+            return
 
       if self.command_origin == "voice":
           self.voice_visualizer_response(response)

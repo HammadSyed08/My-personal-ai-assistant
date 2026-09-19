@@ -1,6 +1,8 @@
 from playwright.sync_api import sync_playwright
 from urllib.parse import quote_plus
 
+import urllib.request
+import urllib.error
 import threading
 import os
 import subprocess
@@ -8,7 +10,65 @@ import time
 import urllib.request
 import json
 import re
+import queue
+import functools
+from concurrent.futures import Future
 
+# ============================================================
+# BROWSER EXECUTOR THREAD
+# ------------------------------------------------------------
+# Playwright's sync API is bound to the thread that created it.
+# Every browser call MUST run on this single thread.
+# ============================================================
+
+_executor_queue = queue.Queue()
+_executor_thread = None
+_executor_thread_lock = threading.Lock()
+_executor_local = threading.local()
+
+
+def _executor_loop():
+    _executor_local.is_browser_thread = True
+    while True:
+        item = _executor_queue.get()
+        if item is None:
+            return
+        func, args, kwargs, future = item
+        try:
+            result = func(*args, **kwargs)
+            if not future.cancelled():
+                future.set_result(result)
+        except BaseException as exc:
+            if not future.cancelled():
+                future.set_exception(exc)
+
+
+def _ensure_executor():
+    global _executor_thread
+    with _executor_thread_lock:
+        if _executor_thread is None or not _executor_thread.is_alive():
+            _executor_thread = threading.Thread(
+                target=_executor_loop,
+                name="HammuBrowserThread",
+                daemon=True,
+            )
+            _executor_thread.start()
+
+
+def run_in_browser_thread(func):
+    """Decorator: force `func` to execute on the single browser thread."""
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # Already on the browser thread? Call directly to avoid deadlock.
+        if getattr(_executor_local, "is_browser_thread", False):
+            return func(*args, **kwargs)
+
+        _ensure_executor()
+        future = Future()
+        _executor_queue.put((func, args, kwargs, future))
+        return future.result()
+
+    return wrapper
 
 # ============================================================
 # PERSISTENT BROWSER ENGINE
@@ -221,6 +281,8 @@ def start_hammu_chrome(profile_name="Default"):
         "--remote-allow-origins=http://localhost",
         "--no-first-run",
         "--no-default-browser-check",
+        "--new-window",
+        "about:blank",
     ]
 
     print(
@@ -260,6 +322,7 @@ def start_hammu_chrome(profile_name="Default"):
 # ============================================================
 
 
+@run_in_browser_thread
 def start_browser():
     print(f"[Browser Thread] start_browser: {threading.get_ident()}")
 
@@ -322,6 +385,15 @@ def start_browser():
             return None
 
         print(f"[Browser] Chrome executable: {chrome_path}")
+
+        # Make sure HAMMU Chrome is running before connecting.
+        if not chrome_cdp_available():
+            print("[Browser] HAMMU Chrome is not running. Starting it...")
+
+            if not start_hammu_chrome("Work"):
+                print("[Browser] Failed to start HAMMU Chrome.")
+                return None
+            
         print(f"[Browser] Connecting to Chrome on port {HAMMU_CHROME_PORT}...")
 
         _browser = _playwright.chromium.connect_over_cdp(
@@ -392,6 +464,7 @@ def start_browser():
 # GET CURRENT PAGE
 # ============================================================
 
+@run_in_browser_thread
 def get_browser_page():
     global _browser
     global _context
@@ -447,7 +520,7 @@ def get_browser_page():
 # ============================================================
 # NEW TAB
 # ============================================================
-
+@run_in_browser_thread
 def browser_new_tab(url=None):
     global _browser
     global _context
@@ -476,7 +549,7 @@ def browser_new_tab(url=None):
         # IMPORTANT:
         # Create the new page inside the SAME context.
         # This makes it a new tab instead of a separate window.
-        new_page = _context.new_page()
+        new_page = _create_tab_via_cdp(url or "about:blank", timeout=15.0)
 
         _pages.append(new_page)
 
@@ -522,7 +595,7 @@ def browser_new_tab(url=None):
             "error": str(error)
         }
 
-
+@run_in_browser_thread
 def browser_list_tabs():
     global _pages
     global _active_page_index
@@ -557,6 +630,7 @@ def browser_list_tabs():
             "error": str(error)
         }
 
+@run_in_browser_thread
 def browser_next_tab():
     global _page
     global _active_page_index
@@ -599,6 +673,7 @@ def browser_next_tab():
         return f"Could not switch tab: {error}"
 
 
+@run_in_browser_thread
 def browser_previous_tab():
     global _page
     global _active_page_index
@@ -630,6 +705,7 @@ def browser_previous_tab():
         return f"Could not switch tab: {error}"
 
 
+@run_in_browser_thread
 def browser_close_tab():
     global _page
     global _pages
@@ -670,117 +746,186 @@ def browser_close_tab():
 # OPEN URL
 # ============================================================
 
-def open_url(url):
-    if not url:
-        return {
-            "success": False,
-            "error": "No URL was provided."
-        }
+def _get_any_live_page():
+    """
+    Return a page that is definitely alive.
 
-    url = url.strip()
+    Never trust the _page global — it can be stale after a
+    temporary tab is closed by the redirect resolver.
+    """
+    global _pages, _active_page_index, _page
 
-    if not url.startswith(("http://", "https://")):
-        url = "https://" + url
+    if _context is None:
+        raise RuntimeError("Browser context is not ready.")
 
-    try:
-        page = get_browser_page()
+    _pages = [p for p in _context.pages if not p.is_closed()]
 
-        if page is None:
-            return {
-                "success": False,
-                "error": "Could not start the browser."
-            }
+    if not _pages:
+        raise RuntimeError("No live pages available.")
 
-        print(f"[Browser] Opening URL: {url}")
-        print("[Browser Debug] Using Playwright navigation...")
-
-        page.goto(
-            url,
-            wait_until="commit",
-            timeout=15000
-        )
-
+    # Prefer the current _page if it still responds.
+    if _page is not None:
         try:
-            page.bring_to_front()
+            if not _page.is_closed():
+                _ = _page.url          # smoke test
+                return _page
         except Exception:
             pass
 
-        print("[Browser Debug] Playwright navigation completed.")
+    if _active_page_index >= len(_pages):
+        _active_page_index = len(_pages) - 1
+    if _active_page_index < 0:
+        _active_page_index = 0
 
-        return {
-            "success": True,
-            "message": "Website opened.",
-            "url": page.url
-        }
+    _page = _pages[_active_page_index]
+    return _page
 
+def _create_tab_via_cdp(url="about:blank", timeout=20.0, make_active=True):
+    """
+    Open a new Chrome tab via raw CDP Target.createTarget.
+
+    Playwright's BrowserContext.new_page() over connect_over_cdp()
+    segfaults on the default context, so we use the CDP primitive.
+
+    make_active=False → the new tab is NOT promoted to _page.
+                        Use this for throw-away pages.
+    """
+    global _pages, _active_page_index, _page
+
+    if _context is None:
+        raise RuntimeError("Browser context is not ready.")
+
+    anchor = _get_any_live_page()
+
+    before = {id(p) for p in _context.pages}
+
+    cdp = _context.new_cdp_session(anchor)
+    try:
+        cdp.send("Target.createTarget", {"url": url or "about:blank"})
+    finally:
+        try:
+            cdp.detach()
+        except Exception:
+            pass
+
+    deadline = time.time() + timeout
+    new_page = None
+    while time.time() < deadline:
+        for p in _context.pages:
+            if id(p) not in before:
+                try:
+                    if not p.is_closed():
+                        new_page = p
+                        break
+                except Exception:
+                    continue
+        if new_page is not None:
+            break
+        time.sleep(0.05)
+
+    if new_page is None:
+        raise RuntimeError("New tab did not appear after Target.createTarget.")
+
+    if make_active:
+        _pages = [p for p in _context.pages if not p.is_closed()]
+        try:
+            _active_page_index = _pages.index(new_page)
+        except ValueError:
+            _active_page_index = len(_pages) - 1
+        _page = new_page
+        try:
+            new_page.bring_to_front()
+        except Exception:
+            pass
+
+    return new_page
+
+@run_in_browser_thread
+def open_url(url):
+    ...
+    print(f"[Browser] Opening URL: {url}")
+
+    try:
+       new_page = _create_tab_via_cdp(url, timeout=15.0)
     except Exception as error:
-        print(
-            f"[Browser Error] Could not open URL: {error}"
-        )
+        print(f"[Browser Error] Could not open URL: {error}")
+        return {"success": False, "error": str(error)}
 
-        return {
-            "success": False,
-            "error": str(error)
-        }
-    
+    print("[Browser Debug] New tab created via CDP.")
+    print(f"[Browser Debug] Active HAMMU tab: {_active_page_index + 1}")
+
+    return {
+        "success": True,
+        "message": "Website opened.",
+        "url": new_page.url,
+    }
 # ============================================================
 # GOOGLE SEARCH
 # ============================================================
 
 
+@run_in_browser_thread
 def resolve_google_url(page, google_url):
-    """
-    Resolve a Google /goto tracking URL to its final destination
-    without creating a new Playwright tab.
-    """
+    global _pages, _active_page_index, _page
 
-    if not google_url:
-        return None
-
-    if "/goto?" not in google_url:
+    if not google_url or "/goto?" not in google_url:
         return google_url
 
+    print(f"[Browser] Resolving Google redirect:\n    From: {google_url}")
+
+    # ---------- 1. HTTP attempt ----------
     try:
-        print(
-            f"[Browser] Resolving Google redirect:"
-            f"\n    From: {google_url}"
-        )
-
-        request = urllib.request.Request(
+        req = urllib.request.Request(
             google_url,
-            headers={
-                "User-Agent": (
-                    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                    "AppleWebKit/537.36 "
-                    "(KHTML, like Gecko) "
-                    "Chrome/120.0.0.0 Safari/537.36"
-                )
-            }
+            headers={"User-Agent": "Mozilla/5.0"},
         )
+        ctx = ssl.create_default_context()
+        ctx.check_hostname = False
+        ctx.verify_mode = ssl.CERT_NONE      # tolerate SSL-inspection proxies
 
-        with urllib.request.urlopen(
-            request,
-            timeout=10
-        ) as response:
+        with urllib.request.urlopen(req, timeout=8, context=ctx) as resp:
+            final_url = resp.geturl()
 
-            final_url = response.geturl()
+        if final_url and "/goto?" not in final_url:
+            print(f"[Browser] Google redirect resolved (HTTP):\n    To:   {final_url}")
+            return final_url
+    except Exception as e:
+        print(f"[Browser] HTTP redirect resolve failed: {e}")
 
-        print(
-            f"[Browser] Google redirect resolved:"
-            f"\n    From: {google_url}"
-            f"\n    To:   {final_url}"
+    # ---------- 2. Browser attempt in a NON-active temp tab ----------
+    try:
+        temp_page = _create_tab_via_cdp(
+            google_url, timeout=10.0, make_active=False
         )
+        try:
+            temp_page.wait_for_load_state("domcontentloaded", timeout=5000)
+        except Exception:
+            pass
 
-        return final_url
+        final_url = temp_page.url
 
-    except Exception as error:
+        try:
+            temp_page.close(run_before_unload=False)
+        except Exception:
+            pass
 
-        print(
-            f"[Browser] Could not resolve Google URL: "
-            f"{error}"
-        )
+        # Refresh state now that the temp tab is gone.
+        _pages = [p for p in _context.pages if not p.is_closed()]
+        if _active_page_index >= len(_pages):
+            _active_page_index = max(0, len(_pages) - 1)
+        if _pages:
+            _page = _pages[_active_page_index]
 
-        return google_url
+        if final_url and "/goto?" not in final_url:
+            print(f"[Browser] Google redirect resolved (Browser):\n    To:   {final_url}")
+            return final_url
+    except Exception as e:
+        print(f"[Browser] Browser redirect resolve failed: {e}")
+
+    return google_url
+
+
+@run_in_browser_thread
 def google_search(query):
     """
     Search Google using the persistent HAMMU Chrome browser.
@@ -1088,7 +1233,7 @@ def google_search(query):
                     print(
                         f"[Browser] Result "
                         f"{len(results)}: "
-                        f"{title} -> {href}"
+                        f"{title} -> {resolved_url}"
                     )
 
                     # Maximum 10 results
@@ -1156,7 +1301,7 @@ def google_search(query):
 # ============================================================
 # YOUTUBE SEARCH
 # ============================================================
-
+@run_in_browser_thread
 def youtube_search(query):
 
     if not query:
@@ -1208,6 +1353,7 @@ WEBSITES = {
 }
 
 
+@run_in_browser_thread
 def open_website(name):
 
     if not name:
@@ -1253,6 +1399,7 @@ def open_website(name):
 # PAGE TITLE
 # ============================================================
 
+@run_in_browser_thread
 def get_page_title():
 
     try:
@@ -1279,6 +1426,7 @@ def get_page_title():
 # CURRENT URL
 # ============================================================
 
+@run_in_browser_thread
 def get_current_url():
 
     try:
@@ -1303,6 +1451,7 @@ def get_current_url():
 # BROWSER BACK
 # ============================================================
 
+@run_in_browser_thread
 def browser_back():
 
     try:
@@ -1325,6 +1474,7 @@ def browser_back():
 # BROWSER FORWARD
 # ============================================================
 
+@run_in_browser_thread
 def browser_forward():
 
     try:
@@ -1347,6 +1497,7 @@ def browser_forward():
 # BROWSER REFRESH
 # ============================================================
 
+@run_in_browser_thread
 def browser_refresh():
 
     try:
@@ -1369,6 +1520,7 @@ def browser_refresh():
 # CLOSE BROWSER
 # ============================================================
 
+@run_in_browser_thread
 def close_browser():
     global _playwright
     global _browser
@@ -1420,6 +1572,7 @@ def close_browser():
 # FIND ELEMENT
 # ============================================================
 
+@run_in_browser_thread
 def find_element(target):
     """
     Find an element on the current webpage.
