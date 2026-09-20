@@ -78,15 +78,126 @@ from tools.windows import get_work_context
 
 from tools.calculator import calculate
 
+import re
+from pathlib import Path
+
+_FILENAME_RE = re.compile(
+    r'[\w\-]+\.(?:png|jpg|jpeg|gif|pdf|txt|docx|xlsx|zip|mp4|mp3|csv|py|json|html|exe|bat)\b',
+    re.IGNORECASE,
+)
+
+def _filename_from_user(user_input):
+    """Return the filename the user typed, or None."""
+    if not user_input:
+        return None
+    match = _FILENAME_RE.search(user_input)
+    return match.group(0) if match else None
+
+
+def _correct_tool_paths(tool_name, args, user_input):
+    """
+    If the user named a file, force the AI's path to use that exact filename.
+    Silently fixes model hallucination like 'hammu_screenshot.png'
+    when the user actually said 'hammu_screenshot_001.png'.
+    """
+    PATH_TOOLS = {
+        "delete_file", "delete_folder", "read_file", "create_file",
+        "rename_item", "copy_item", "move_item",
+    }
+
+    if tool_name not in PATH_TOOLS or not isinstance(args, dict):
+        return
+
+    user_file = _filename_from_user(user_input)
+    if not user_file:
+        return
+
+    # Check both possible keys
+    for key in ("path", "old_path", "source"):
+        if key not in args:
+            continue
+
+        ai_path = str(args.get(key) or "")
+        if not ai_path:
+            continue
+
+        if user_file.lower() in ai_path.lower():
+            continue   # already correct
+
+        # Replace the basename with the user's filename, keep the dir.
+        parent = str(Path(ai_path).parent)
+        fixed = str(Path(parent) / user_file) if parent and parent != "." else user_file
+
+        print(f"[Command Engine] Corrected {key}: {ai_path!r} → {fixed!r}")
+        args[key] = fixed
 
 # ============================================================
 # TOOL EXECUTOR
 # ============================================================
 
-def execute_tool(tool_name, args):
+def execute_tool(tool_name, args,  _skip_confirmation=False):
 
     if not isinstance(args, dict):
         return "Security blocked the operation: invalid arguments."
+
+    TOOL_ALIASES = {
+    # delete variants
+    "file_delete":     "delete_file",
+    "delete":          "delete_file",
+    "remove_file":     "delete_file",
+    "delete_file_":    "delete_file",
+
+    # folder variants
+    "folder_delete":   "delete_folder",
+    "remove_folder":   "delete_folder",
+
+    # create variants
+    "file_create":     "create_file",
+    "create":          "create_file",
+    "new_file":        "create_file",
+    "folder_create":   "create_folder",
+    "new_folder":      "create_folder",
+    "make_folder":     "create_folder",
+
+    # read / list variants
+    "file_read":       "read_file",
+    "read":            "read_file",
+    "list_files":      "list_directory",
+    "dir":             "list_directory",
+    "ls":              "list_directory",
+
+    # move / copy variants
+    "file_move":       "move_item",
+    "file_copy":       "copy_item",
+    "move":            "move_item",
+    "copy":            "copy_item",
+    "rename":          "rename_item",
+
+    # browser variants
+    "browse":          "open_url",
+    "go_to_url":       "open_url",
+    "search_google":   "google_search",
+    "search_web":      "google_search",
+    "search_youtube":  "youtube_search",
+    "open_app":        "open_application",
+    "close_app":       "close_application",
+    "kill_application":"close_application",
+
+    # screenshot variants
+    "screenshot":      "take_screenshot",
+    "screen_capture":  "take_screenshot",
+    "capture_screen":  "take_screenshot",
+    }
+
+    original_name = tool_name
+    tool_name = TOOL_ALIASES.get(tool_name, tool_name)
+
+    if tool_name != original_name:
+        print(f"[Command Engine] Normalised tool '{original_name}' → '{tool_name}'")
+
+    # --- safety defaults (already added, keep them) ---
+    path = ""
+    resolved_path = None
 
     # Calculator
     if tool_name == "calculator":
@@ -168,7 +279,7 @@ def execute_tool(tool_name, args):
     # CONFIRMATION FOR DANGEROUS ACTIONS
     # ========================================================
 
-    if requires_confirmation(tool_name):
+    if requires_confirmation(tool_name) and not _skip_confirmation:
         target = (
             args.get("path")
             or args.get("source")
@@ -176,7 +287,19 @@ def execute_tool(tool_name, args):
             or "system operation"
         )
 
-        if not ask_confirmation(tool_name, target):
+        confirmation = ask_confirmation(
+            tool_name,
+            target
+        )
+
+        # Frontend confirmation required
+        if isinstance(confirmation, dict):
+            confirmation["tool_name"] = tool_name
+            confirmation["args"] = args
+            return confirmation
+
+        # Terminal confirmation
+        if not confirmation:
             return "Operation cancelled by user."
 
     # ========================================================
@@ -969,6 +1092,114 @@ def handle_memory_command(user_input):
             "type": "tool",
             "result": f"Your favourite {keyword} is {favourite_value}."
         }
+
+
+    if lower_text.startswith("what is my favourite "):
+        keyword = text[len("what is my favourite "):].strip()
+
+        if not keyword:
+            return {
+                "success": False,
+                "type": "tool",
+                "result": "What would you like to know?"
+            }
+
+        memories = memory.search(
+            f"favourite {keyword}"
+        )
+
+        if not memories:
+            return {
+                "success": True,
+                "type": "tool",
+                "result": f"I don't have any memories about your favourite {keyword}."
+            }
+
+        memory_value = memories[0][1]
+
+        prefix = f"my favourite {keyword} is "
+
+        if memory_value.lower().startswith(prefix):
+            favourite_value = memory_value[len(prefix):].strip()
+        else:
+            favourite_value = memory_value
+
+        return {
+            "success": True,
+            "type": "tool",
+            "result": f"Your favourite {keyword} is {favourite_value}."
+        }
+
+    # DAY TASK MEMORY
+    if (
+        ("task" in lower_text)
+        and (
+            "monday" in lower_text
+            or "tuesday" in lower_text
+            or "wednesday" in lower_text
+            or "thursday" in lower_text
+            or "friday" in lower_text
+            or "saturday" in lower_text
+            or "sunday" in lower_text
+        )
+    ):
+        days = [
+            "monday",
+            "tuesday",
+            "wednesday",
+            "thursday",
+            "friday",
+            "saturday",
+            "sunday"
+        ]
+
+        requested_day = None
+
+        for day in days:
+            if day in lower_text:
+                requested_day = day
+                break
+
+        memories = memory.search(requested_day)
+
+        if not memories:
+            return {
+                "success": True,
+                "type": "tool",
+                "result": f"I don't have any task saved for {requested_day.title()}."
+            }
+
+        memory_value = memories[-1][1]
+
+        return {
+            "success": True,
+            "type": "tool",
+            "result": f"Your task for {requested_day.title()} is:\n{memory_value}"
+        }
+
+    # TODAY TASK MEMORY
+    if (
+        "today task" in lower_text
+        or "today's task" in lower_text
+        or "todays task" in lower_text
+    ):
+        memories = memory.search("today")
+
+        if not memories:
+            return {
+                "success": True,
+                "type": "tool",
+                "result": "I don't have any task saved for today."
+            }
+
+        # Use the most recently saved matching memory
+        memory_value = memories[-1][1]
+
+        return {
+            "success": True,
+            "type": "tool",
+            "result": f"Your task for today is:\n{memory_value}"
+        }
         
     return None
 
@@ -1040,7 +1271,13 @@ def _process_command(user_input):
                 "response": "Invalid tool."
             }
 
+        _correct_tool_paths(tool_name, args, user_input)
+
         result = execute_tool(tool_name, args)
+
+        # Frontend confirmation request → pass straight to the UI
+        if isinstance(result, dict) and result.get("required") is True:
+            return result
 
         return {
             "success": True,
@@ -1080,6 +1317,8 @@ def _process_command(user_input):
                 })
 
                 continue
+
+            _correct_tool_paths(tool_name, args, user_input)
 
             result = execute_tool(
                 tool_name,

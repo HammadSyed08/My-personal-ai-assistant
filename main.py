@@ -1,5 +1,6 @@
 from core.command_engine import process_command
 from voice.speech_to_text import speech_to_text
+from security.permissions import set_confirmation_mode
 
 # ============================================================
 # Voice MODE
@@ -74,6 +75,8 @@ def run_voice_mode():
 # ============================================================
 
 def main():
+
+    set_confirmation_mode("terminal")
 
     print("=" * 60)
     print("Hammu AI Assistant")

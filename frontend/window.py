@@ -82,6 +82,7 @@ class HAMMUWindow(QWidget):
 
         self.command_origin = "text"
         self.processing = False
+        self.pending_confirmation = None
         self.closing = False
 
 
@@ -94,6 +95,138 @@ class HAMMUWindow(QWidget):
     #       350,
     #       self.play_startup_sound
     #   )
+
+
+    def show_confirmation_request(
+        self,
+        action,
+        target,
+        tool_name=None,
+        args=None
+    ):
+        """
+        Display a security confirmation request in the HAMMU chat.
+        The actual action is NOT executed here.
+        """
+
+        self.pending_confirmation = {
+            "action": action,
+            "target": target,
+            "tool_name": tool_name,
+            "args": args,
+        }
+
+        message = (
+            "⚠️ SECURITY CONFIRMATION REQUIRED\n\n"
+            f"Action: {action}\n"
+            f"Target: {target}\n\n"
+            "This operation can modify or remove data.\n"
+            "Do you want to continue?"
+        )
+
+        self.add_message("HAMMU", message)
+
+        # Confirmation button container
+        confirmation_frame = QFrame()
+        confirmation_layout = QHBoxLayout(
+            confirmation_frame
+        )
+
+        confirmation_layout.setSpacing(10)
+
+        # YES button
+        self.confirm_yes_button = QPushButton("YES")
+        self.confirm_yes_button.setObjectName(
+            "confirmationYesButton"
+        )
+
+        # NO button
+        self.confirm_no_button = QPushButton("NO")
+        self.confirm_no_button.setObjectName(
+            "confirmationNoButton"
+        )
+
+        self.confirm_yes_button.clicked.connect(
+            self.confirmation_yes
+        )
+
+        self.confirm_no_button.clicked.connect(
+            self.confirmation_no
+        )
+
+        confirmation_layout.addWidget(
+            self.confirm_yes_button
+        )
+
+        confirmation_layout.addWidget(
+            self.confirm_no_button
+        )
+
+        self.chat_layout.addWidget(
+            confirmation_frame
+        )
+
+        self.confirmation_frame = confirmation_frame
+
+    def confirmation_yes(self):
+        if not self.pending_confirmation:
+            return
+
+        confirmation = self.pending_confirmation
+
+        self.add_message("You", "Yes")
+
+        self.remove_confirmation_buttons()
+
+        self.pending_confirmation = None
+
+        tool_name = confirmation.get("tool_name")
+        args = confirmation.get("args", {})
+
+        if not tool_name:
+            self.add_message(
+                "HAMMU",
+                "Confirmation failed: no tool was specified."
+            )
+            self.set_ready_state()
+            return
+
+        self.set_processing_state(
+            "THINKING",
+            "EXECUTING CONFIRMED ACTION..."
+        )
+
+        self.command_worker.confirmed_tool_requested.emit(
+            tool_name,
+            args
+        )
+
+
+    def confirmation_no(self):
+        if not self.pending_confirmation:
+            return
+
+        self.add_message("You", "No")
+
+        self.remove_confirmation_buttons()
+
+        self.pending_confirmation = None
+
+        self.add_message(
+            "HAMMU",
+            "Operation cancelled."
+        )
+
+        self.set_ready_state()
+        
+    def remove_confirmation_buttons(self):
+        if hasattr(self, "confirm_yes_button"):
+            self.confirm_yes_button.deleteLater()
+            self.confirm_yes_button = None
+
+        if hasattr(self, "confirm_no_button"):
+            self.confirm_no_button.deleteLater()
+            self.confirm_no_button = None
 
     # -----------------------------------------------------
     # Window
@@ -349,15 +482,15 @@ class HAMMUWindow(QWidget):
     def create_chat_page(self):
 
         page = QWidget()
-        layout = QVBoxLayout(page)
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.setSpacing(10)
+        self.chat_layout = QVBoxLayout(page)
+        self.chat_layout.setContentsMargins(0, 0, 0, 0)
+        self.chat_layout.setSpacing(10)
 
         self.chat = QTextEdit()
         self.chat.setObjectName("Chat")
         self.chat.setReadOnly(True)
 
-        layout.addWidget(self.chat, 1)
+        self.chat_layout.addWidget(self.chat, 1)
 
         # Activity bar
         activity = QFrame()
@@ -378,7 +511,7 @@ class HAMMUWindow(QWidget):
 
         activity_layout.addWidget(self.activity_status)
 
-        layout.addWidget(activity)
+        self.chat_layout.addWidget(activity)
 
         # Input area
         input_layout = QHBoxLayout()
@@ -402,7 +535,7 @@ class HAMMUWindow(QWidget):
         input_layout.addWidget(self.mic_button)
         input_layout.addWidget(self.send_button)
 
-        layout.addLayout(input_layout)
+        self.chat_layout.addLayout(input_layout)
 
         return page
 
@@ -880,6 +1013,24 @@ class HAMMUWindow(QWidget):
         self.command_worker.command_received.emit(command)
 
     def command_finished(self, result):
+
+      
+      if isinstance(result, dict) and result.get("required") is True:
+        self.show_confirmation_request(
+            result.get("action", "unknown"),
+            result.get("target", "unknown"),
+            result.get("tool_name"),
+            result.get("args")
+        )
+
+        self.processing = False
+        self.send_button.setEnabled(True)
+        self.mic_button.setEnabled(True)
+        self.input.setEnabled(True)
+        self.voice_core_button.setEnabled(True)
+        self.input.setFocus()
+        return
+
       response = self.normalize_result(result)
 
       if response.strip().lower() in (

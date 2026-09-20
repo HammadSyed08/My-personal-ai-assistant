@@ -20,7 +20,8 @@ if PROJECT_ROOT not in sys.path:
 
 from PySide6.QtCore import QObject, Signal, Slot
 
-from core.command_engine import process_command
+
+from core.command_engine import process_command, execute_tool
 from voice.speech_to_text import speech_to_text
 from speech_controller import speech_controller
 
@@ -32,30 +33,38 @@ from speech_controller import speech_controller
 class CommandWorker(QObject):
 
     command_received = Signal(str)
+    confirmed_tool_requested = Signal(str, object)
+
     finished = Signal(object)
     error = Signal(str)
 
     def __init__(self):
         super().__init__()
-
-        self.command_received.connect(
-            self.run
-        )
+        self.command_received.connect(self.run)
+        self.confirmed_tool_requested.connect(self.run_confirmed_tool)
 
     @Slot(str)
     def run(self, command):
-
         try:
-
             result = process_command(command)
-
             self.finished.emit(result)
-
         except Exception as error:
+            self.error.emit(str(error))
 
-            self.error.emit(
-                str(error)
-            )
+    @Slot(str, object)
+    def run_confirmed_tool(self, tool_name, args):
+        try:
+            # Bypass the confirmation gate — the user already confirmed.
+            result = execute_tool(tool_name, args, _skip_confirmation=True)
+
+            self.finished.emit({
+                "success": True,
+                "type": "tool",
+                "tool": tool_name,
+                "result": result,
+            })
+        except Exception as error:
+            self.error.emit(str(error))
 
 
 class VoiceWorker(QObject):

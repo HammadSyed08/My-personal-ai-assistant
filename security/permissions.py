@@ -119,19 +119,37 @@ def requires_confirmation(action):
 
 
 # ============================================================
+# CONFIRMATION MODE
+# ============================================================
+
+CONFIRMATION_MODE = "terminal"
+
+
+def set_confirmation_mode(mode):
+    global CONFIRMATION_MODE
+
+    if mode in {"terminal", "frontend"}:
+        CONFIRMATION_MODE = mode
+
+# ============================================================
 # USER CONFIRMATION
 # ============================================================
 
 def ask_confirmation(action, target):
 
+    if CONFIRMATION_MODE == "frontend":
+        return {
+            "required": True,
+            "action": action,
+            "target": target,
+        }
+
     print()
     print("=" * 60)
     print("⚠️  SECURITY CONFIRMATION REQUIRED")
     print("=" * 60)
-
     print(f"Action : {action}")
     print(f"Target : {target}")
-
     print()
     print("This operation can modify or remove data.")
 

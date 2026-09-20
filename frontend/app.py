@@ -1,6 +1,15 @@
 # frontend/app.py
 import sys
+import os
 
+PROJECT_ROOT = os.path.dirname(
+    os.path.dirname(os.path.abspath(__file__))
+)
+
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
+
+from security.permissions import set_confirmation_mode
 from PySide6.QtCore import QTimer, QPropertyAnimation, QEasingCurve
 from PySide6.QtWidgets import QApplication
 
@@ -13,6 +22,7 @@ from splash  import CinematicSplash
 # ---------------------------------------------------------------------------
 
 def main():
+    set_confirmation_mode("frontend")
     app = QApplication(sys.argv)
     app.setApplicationName("HAMMU")
 

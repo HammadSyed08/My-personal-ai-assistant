@@ -134,10 +134,10 @@ scroll_mouse:
 {"amount":5}
 
 take_screenshot:
-{"path":"E:\\hammu_screenshot.png"}
+{}
 
 take_screen_screenshot:
-{"path":"E:\\hammu_screen.png"}
+{}
 
 analyze_screen:
 {"question":"What is currently visible on the screen?","path":"E:\\hammu_screen.png"}
@@ -147,6 +147,31 @@ locate_and_click:
 
 get_screen_size:
 {}
+
+=== FILENAME RULE — CRITICAL ===
+
+When the user names a file, copy the filename EXACTLY as written.
+Never add, remove, or "normalize" digits, underscores, dashes, or the
+extension.
+
+Correct behaviour:
+
+User: delete hammu_screenshot_001.png
+→ {"type":"tool","tool":"delete_file","args":{"path":"E:\\hammu_screenshot_001.png"}}
+
+User: delete hammu_screenshot_042.png
+→ {"type":"tool","tool":"delete_file","args":{"path":"E:\\hammu_screenshot_042.png"}}
+
+User: remove report_final_v3.docx
+→ {"type":"tool","tool":"delete_file","args":{"path":"E:\\report_final_v3.docx"}}
+
+If the user did NOT name a file (e.g. "delete the last screenshot"),
+return type "chat" and ask which one — do NOT guess a filename.
+
+The default path E:\hammu_screenshot.png is ONLY a fallback for
+take_screenshot when the user gave no name. Never use it as the
+target of delete_file, read_file, rename_item, or any other tool
+unless the user literally typed "hammu_screenshot.png".
 
 
 BROWSER RULES:
@@ -321,6 +346,57 @@ def fast_command(user_message):
             "type": "tool",
             "tool": "browser_close_tab",
             "args": {}
+        }
+
+
+    
+
+    # ============================================================
+    # FAST FILE DELETE  (never touches Ollama)
+    # ============================================================
+
+    delete_match = re.match(
+        r"^(?:delete|remove)\s+(?:the\s+file\s+)?([\w\-]+\.[A-Za-z0-9]+)\s*$",
+        text.strip(),
+        re.IGNORECASE,
+    )
+
+    if delete_match:
+        filename = delete_match.group(1).strip()
+        return {
+            "type": "tool",
+            "tool": "delete_file",
+            "args": {"path": f"E:\\{filename}"},
+        }
+    
+
+    # read <file>
+    read_match = re.match(
+        r"^(?:read|open)\s+(?:the\s+file\s+)?([\w\-]+\.[A-Za-z0-9]+)\s*$",
+        text.strip(),
+        re.IGNORECASE,
+    )
+    if read_match:
+        return {
+            "type": "tool",
+            "tool": "read_file",
+            "args": {"path": f"E:\\{read_match.group(1).strip()}"},
+        }
+
+    # rename <old> to <new>
+    rename_match = re.match(
+        r"^rename\s+([\w\-]+\.[A-Za-z0-9]+)\s+to\s+([\w\-]+\.[A-Za-z0-9]+)\s*$",
+        text.strip(),
+        re.IGNORECASE,
+    )
+    if rename_match:
+        return {
+            "type": "tool",
+            "tool": "rename_item",
+            "args": {
+                "old_path": f"E:\\{rename_match.group(1).strip()}",
+                "new_name": rename_match.group(2).strip(),
+            },
         }
 
     # ============================================================
